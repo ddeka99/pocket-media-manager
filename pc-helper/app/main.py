@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from .auth import validate_token
 from .config import AppPaths, RuntimeConfig
@@ -145,10 +145,11 @@ def save_progress(
 
 
 @app.post("/library/{media_item_id}/feedback", status_code=status.HTTP_204_NO_CONTENT)
-def add_feedback(media_item_id: str, payload: FeedbackPayload, _: Authenticated) -> None:
+def add_feedback(media_item_id: str, payload: FeedbackPayload, _: Authenticated) -> Response:
     if not database.get_media_item(media_item_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media item not found")
     database.add_feedback(media_item_id, payload.feedback_type)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.post("/library/{media_item_id}/stream", response_model=StreamResponse)

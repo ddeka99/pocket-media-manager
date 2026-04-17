@@ -1,0 +1,12 @@
+.DS_Store
+Thumbs.db
+
+.pytest_cache/
+__pycache__/
+*.py[cod]
+
+pc-helper/.venv/
+pc-helper/data/
+
+.idea/
+.vscode/
