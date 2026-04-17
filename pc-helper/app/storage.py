@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import RuntimeConfig
-from .models import FeedbackType, MediaItem, PlaybackProgress
+from .models import FeedbackType, FolderSummary, LibraryScanJob, LibrarySummaryResponse, MediaItem, PlaybackProgress
 
 
 def utcnow_iso() -> str:
@@ -283,6 +283,53 @@ class Database:
         with self.connect() as conn:
             row = conn.execute("SELECT COUNT(*) AS count FROM media_items").fetchone()
         return int(row["count"])
+
+    def library_summary(self) -> LibrarySummaryResponse:
+        config = self.load_config()
+        with self.connect() as conn:
+            counts = conn.execute(
+                """
+                SELECT
+                    COUNT(*) AS total_items,
+                    SUM(CASE WHEN compatible_for_direct_play = 1 THEN 1 ELSE 0 END) AS direct_play_items,
+                    SUM(CASE WHEN compatible_for_direct_play = 0 THEN 1 ELSE 0 END) AS incompatible_items
+                FROM media_items
+                """
+            ).fetchone()
+            folder_rows = conn.execute(
+                """
+                SELECT
+                    CASE
+                        WHEN folder = '' THEN 'Root'
+                        ELSE folder
+                    END AS folder,
+                    COUNT(*) AS item_count
+                FROM media_items
+                GROUP BY folder
+                ORDER BY item_count DESC, lower(folder)
+                LIMIT 5
+                """
+            ).fetchall()
+            latest_scan_row = conn.execute(
+                "SELECT * FROM scan_jobs ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+
+        latest_scan = (
+            LibraryScanJob.model_validate(dict(latest_scan_row))
+            if latest_scan_row is not None
+            else None
+        )
+        return LibrarySummaryResponse(
+            media_root=str(config.media_root) if config.media_root else None,
+            total_items=int(counts["total_items"] or 0),
+            direct_play_items=int(counts["direct_play_items"] or 0),
+            incompatible_items=int(counts["incompatible_items"] or 0),
+            latest_scan=latest_scan,
+            top_folders=[
+                FolderSummary(folder=row["folder"], item_count=int(row["item_count"]))
+                for row in folder_rows
+            ],
+        )
 
     def _row_to_media_item(
         self, row: sqlite3.Row, feedback_types: list[FeedbackType]

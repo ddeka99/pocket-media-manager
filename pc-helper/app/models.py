@@ -92,3 +92,17 @@ class LibraryScanJob(BaseModel):
     scanned_files: int
     started_at: datetime
     completed_at: datetime | None = None
+
+
+class FolderSummary(BaseModel):
+    folder: str
+    item_count: int
+
+
+class LibrarySummaryResponse(BaseModel):
+    media_root: str | None
+    total_items: int
+    direct_play_items: int
+    incompatible_items: int
+    latest_scan: LibraryScanJob | None = None
+    top_folders: list[FolderSummary] = Field(default_factory=list)

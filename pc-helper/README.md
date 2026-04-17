@@ -22,6 +22,35 @@ over your local network, and stores playback plus feedback events in SQLite.
 5. Call `PUT /config` with the token and your media root path.
 6. Call `POST /library/rescan` to build the library index.
 
+## Main flow
+
+1. `GET /pairing`
+   Read the local token used by the iPhone app and admin scripts.
+2. `PUT /config`
+   Store the Windows media root that should be scanned.
+3. `POST /library/rescan`
+   Walk the media root, extract metadata, and update the SQLite index.
+4. `GET /library`
+   Return the full media list used by the iPhone app.
+5. `POST /library/{id}/stream`
+   Return a stream URL for playback.
+6. `POST /library/{id}/progress` and `POST /library/{id}/feedback`
+   Save watch progress and simple preference signals.
+
+## Small operator commands
+
+With the helper already running:
+
+```powershell
+.\scripts\admin.ps1
+```
+
+Rescan and print a short summary:
+
+```powershell
+.\scripts\admin.ps1 -Rescan
+```
+
 ## Testing
 
 Run the backend tests with:
@@ -32,6 +61,12 @@ Run the backend tests with:
 
 ## Notes
 
+- The helper keeps its local state in `pc-helper/data/library.db`.
+- Important code paths:
+  - `app/main.py`: HTTP routes
+  - `app/scanner.py`: folder walk and indexing
+  - `app/media.py`: title/compatibility/ffprobe metadata extraction
+  - `app/storage.py`: SQLite reads and writes
 - If `python` or `py` still resolves to a Windows Store stub in this shell,
   disable the App Execution Aliases for Python or restart the terminal after
   installation.

@@ -15,6 +15,7 @@ from .models import (
     FeedbackPayload,
     HealthResponse,
     LibraryScanJob,
+    LibrarySummaryResponse,
     MediaItem,
     MediaListResponse,
     PairingResponse,
@@ -115,6 +116,11 @@ def rescan_library(_: Authenticated) -> LibraryScanJob:
 @app.get("/library", response_model=MediaListResponse)
 def list_library(_: Authenticated) -> MediaListResponse:
     return MediaListResponse(items=database.list_media_items())
+
+
+@app.get("/library/summary", response_model=LibrarySummaryResponse)
+def library_summary(_: Authenticated) -> LibrarySummaryResponse:
+    return database.library_summary()
 
 
 @app.get("/library/{media_item_id}", response_model=MediaItem)
