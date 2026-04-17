@@ -1,3 +1,8 @@
+param(
+    [string]$Host = "0.0.0.0",
+    [int]$Port = 8765
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -7,4 +12,4 @@ if (-not (Test-Path $venvPython)) {
     exit 1
 }
 
-& $venvPython -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8765
+& $venvPython -m uvicorn app.main:app --reload --host $Host --port $Port

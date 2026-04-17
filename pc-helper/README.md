@@ -51,6 +51,12 @@ Rescan and print a short summary:
 .\scripts\admin.ps1 -Rescan
 ```
 
+Check the Wi-Fi URL and pairing token that the iPhone app should use:
+
+```powershell
+.\scripts\lan-check.ps1
+```
+
 ## Testing
 
 Run the backend tests with:
@@ -67,6 +73,8 @@ Run the backend tests with:
   - `app/scanner.py`: folder walk and indexing
   - `app/media.py`: title/compatibility/ffprobe metadata extraction
   - `app/storage.py`: SQLite reads and writes
+- For your current Windows session, the helper is reachable on the local Wi-Fi at
+  `http://10.0.0.235:8765` while that IPv4 address remains the same.
 - If `python` or `py` still resolves to a Windows Store stub in this shell,
   disable the App Execution Aliases for Python or restart the terminal after
   installation.

@@ -1,11 +1,10 @@
 param(
-    [switch]$Rescan
+    [switch]$Rescan,
+    [string]$BaseUrl = "http://127.0.0.1:8765"
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-
-$baseUrl = "http://127.0.0.1:8765"
 
 function Get-HelperToken {
     return (Invoke-RestMethod "$baseUrl/pairing").api_token

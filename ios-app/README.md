@@ -26,8 +26,8 @@ This folder contains a SwiftUI client scaffold that matches the PC helper contra
 
 ## When To Start On MacBook
 
-Move to the MacBook/Xcode phase after the Windows helper is stable on your LAN
-and reachable from the iPhone network.
+Move to the MacBook/Xcode phase after `pc-helper/scripts/lan-check.ps1`
+prints a reachable Wi-Fi URL and pairing token for the helper.
 
 ## Opening in Xcode
 
