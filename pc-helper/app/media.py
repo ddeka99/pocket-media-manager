@@ -62,14 +62,13 @@ def extract_media_metadata(path: Path) -> dict[str, object]:
             ],
             check=True,
             capture_output=True,
-            text=True,
             timeout=10,
         )
     except (FileNotFoundError, subprocess.SubprocessError):
         return metadata
 
     try:
-        parsed = json.loads(result.stdout)
+        parsed = json.loads(result.stdout.decode("utf-8", errors="replace"))
     except json.JSONDecodeError:
         return metadata
 
