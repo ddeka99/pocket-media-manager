@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from fastapi import Header, HTTPException, Query, status
+from fastapi import HTTPException, status
 
 
 def validate_token(
     expected_token: str,
-    authorization: str | None = Header(default=None),
-    token: str | None = Query(default=None),
+    authorization: str | None = None,
+    token: str | None = None,
 ) -> None:
     if authorization and authorization.lower().startswith("bearer "):
         provided = authorization.split(" ", 1)[1]

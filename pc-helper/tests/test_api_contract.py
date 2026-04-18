@@ -80,3 +80,39 @@ def test_library_summary_endpoint(tmp_path: Path) -> None:
     assert payload["direct_play_items"] == 1
     assert payload["incompatible_items"] == 1
     assert payload["media_root"] == str(tmp_path)
+
+
+def test_stream_endpoint_accepts_query_token(tmp_path: Path) -> None:
+    database.database_path = tmp_path / "api.db"
+    database.initialize(RuntimeConfig(media_root=tmp_path, api_token="abc123"))
+
+    media_path = tmp_path / "direct.mp4"
+    media_path.write_bytes(b"fake media bytes")
+    database.replace_media_index(
+        [
+            {
+                "id": "media-1",
+                "title": "Direct",
+                "file_name": "direct.mp4",
+                "relative_path": "direct.mp4",
+                "absolute_path": str(media_path),
+                "folder": "",
+                "size_bytes": media_path.stat().st_size,
+                "duration_seconds": 60.0,
+                "video_codec": "h264",
+                "audio_codec": "aac",
+                "width": 1280,
+                "height": 720,
+                "container": "mp4",
+                "compatible_for_direct_play": 1,
+                "incompatible_reason": None,
+                "updated_at": "2026-01-01T00:00:00+00:00",
+            }
+        ]
+    )
+
+    client = TestClient(app)
+    response = client.get("/media/media-1/stream?token=abc123")
+
+    assert response.status_code == 200
+    assert response.content == b"fake media bytes"
