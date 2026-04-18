@@ -10,3 +10,6 @@ pc-helper/data/
 
 .idea/
 .vscode/
+
+*.xcuserstate
+xcuserdata/
