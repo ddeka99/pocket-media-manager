@@ -5,17 +5,17 @@ over your local network, and stores playback plus feedback events in SQLite.
 
 ## Quick start
 
-1. Open PowerShell in `pc-helper/`.
+1. Open Git Bash in `pc-helper/`.
 2. Bootstrap the local environment:
 
-```powershell
-.\scripts\bootstrap.ps1
+```bash
+bash ./scripts/bootstrap.sh
 ```
 
 3. Run the API:
 
-```powershell
-.\scripts\run-dev.ps1
+```bash
+bash ./scripts/run-dev.sh
 ```
 
 4. Call `GET /pairing` to read the local API token.
@@ -41,33 +41,35 @@ over your local network, and stores playback plus feedback events in SQLite.
 
 With the helper already running:
 
-```powershell
-.\scripts\admin.ps1
+```bash
+bash ./scripts/admin.sh
 ```
 
 Rescan and print a short summary:
 
-```powershell
-.\scripts\admin.ps1 -Rescan
+```bash
+bash ./scripts/admin.sh --rescan
 ```
 
 Check the Wi-Fi URL and pairing token that the iPhone app should use:
 
-```powershell
-.\scripts\lan-check.ps1
+```bash
+bash ./scripts/lan-check.sh
 ```
 
 ## Testing
 
 Run the backend tests with:
 
-```powershell
-.\scripts\test.ps1
+```bash
+bash ./scripts/test.sh
 ```
 
 ## Notes
 
 - The helper keeps its local state in `pc-helper/data/library.db`.
+- Git Bash is now the preferred Windows shell for the helper workflow.
+- The older `.ps1` scripts still exist if you ever want the PowerShell path.
 - Important code paths:
   - `app/main.py`: HTTP routes
   - `app/scanner.py`: folder walk and indexing
