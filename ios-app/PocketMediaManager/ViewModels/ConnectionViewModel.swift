@@ -15,7 +15,10 @@ final class ConnectionViewModel: ObservableObject {
     }
 
     func save(into store: AppConfigurationStore) {
-        store.configuration = AppConfiguration(serverURLString: serverURL, apiToken: apiToken)
+        let configuration = AppConfiguration(serverURLString: serverURL, apiToken: apiToken).normalized
+        serverURL = configuration.serverURLString
+        apiToken = configuration.apiToken
+        store.configuration = configuration
         isConnected = true
     }
 
@@ -24,11 +27,18 @@ final class ConnectionViewModel: ObservableObject {
         defer { isValidating = false }
 
         do {
-            let client = APIClient(configuration: AppConfiguration(serverURLString: serverURL, apiToken: apiToken))
+            let configuration = AppConfiguration(serverURLString: serverURL, apiToken: apiToken).normalized
+            serverURL = configuration.serverURLString
+            apiToken = configuration.apiToken
+
+            let client = APIClient(configuration: configuration)
             let health = try await client.fetchHealth()
-            statusMessage = "Helper reachable. Library count: \(health.libraryCount)"
+            let summary = try await client.fetchLibrarySummary()
+            statusMessage = "Helper reachable. \(summary.totalItems) items indexed, \(summary.directPlayItems) direct-play ready."
+            isConnected = health.status == "ok"
         } catch {
             statusMessage = error.localizedDescription
+            isConnected = false
         }
     }
 }

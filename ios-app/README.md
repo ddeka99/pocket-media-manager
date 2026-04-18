@@ -31,6 +31,28 @@ prints a reachable Wi-Fi URL and pairing token for the helper.
 
 ## Opening in Xcode
 
-Create a new iOS App project in Xcode named `PocketMediaManager`, then replace the generated source files with the contents of `PocketMediaManager/` and use `Info.plist` from this folder.
+Open `ios-app/PocketMediaManager.xcodeproj` in Xcode.
 
-This repository was scaffolded from Windows, so an `.xcodeproj` was not generated locally here.
+The project is now checked in and points at:
+
+- app sources in `ios-app/PocketMediaManager/`
+- app plist in `ios-app/Info.plist`
+- bootstrap LAN connection defaults in `ios-app/PocketMediaManager/Resources/BootstrapConfiguration.plist`
+
+## Current Bootstrap Helper Settings
+
+The first launch on a fresh install preloads:
+
+- Helper URL: `http://10.0.0.235:8765`
+- Pairing token: `rqc37qS44rS61TwSpdDwcytmQV8F-Wuz`
+
+If the Windows PC IP or token changes later, either edit those values in the app's Settings tab or update `BootstrapConfiguration.plist` before reinstalling.
+
+## Personal Device Testing
+
+1. Connect your iPhone to the MacBook and trust the computer on the device if prompted.
+2. In Xcode, select the `PocketMediaManager` target, then open Signing & Capabilities.
+3. Leave signing automatic, choose your Personal Team, and change the bundle identifier if Xcode says the default one is unavailable.
+4. Pick your iPhone as the run destination and press Run.
+
+The current plist allows plain HTTP for LAN testing so the app can talk to the Windows helper at `10.0.0.235:8765` during this personal-device phase.

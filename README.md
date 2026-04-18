@@ -10,4 +10,4 @@ Personal media streaming and recommendation playground for a single-user iPhone 
 ## Current Status
 
 - Windows helper: runnable, tested, and scanning your configured media library.
-- iPhone client: scaffolded, but the MacBook/Xcode phase starts after the Windows helper flow is stable on your LAN.
+- iPhone client: checked-in Xcode project under `ios-app/`, with the current LAN helper URL/token preloaded for personal-device testing.

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>ServerURL</key>
+	<string>http://10.0.0.235:8765</string>
+	<key>APIToken</key>
+	<string>rqc37qS44rS61TwSpdDwcytmQV8F-Wuz</string>
+</dict>
+</plist>
