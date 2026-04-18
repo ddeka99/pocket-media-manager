@@ -5,19 +5,9 @@ struct RootView: View {
 
     var body: some View {
         if configurationStore.configuration.serverURL == nil || configurationStore.configuration.apiToken.isEmpty {
-            ConnectionView()
+            ConnectionView(mode: .onboarding)
         } else {
-            TabView {
-                LibraryView()
-                    .tabItem {
-                        Label("Library", systemImage: "film.stack")
-                    }
-
-                ConnectionView()
-                    .tabItem {
-                        Label("Settings", systemImage: "gearshape")
-                    }
-            }
+            LibraryView()
         }
     }
 }

@@ -6,8 +6,9 @@ This folder contains a SwiftUI client scaffold that matches the PC helper contra
 
 - Manual connection to the PC helper with a server URL and pairing token
 - Library loading over the helper HTTP API
-- Detail screen with metadata and feedback controls
-- Native playback through `AVPlayer` and `VideoPlayer`
+- Library-first browsing with a compact safe-area header for settings and refresh
+- Compact detail screen focused on playback, resume state, and feedback
+- Landscape-first full-screen playback through Apple's `AVPlayerViewController`
 - Periodic playback progress sync back to the helper
 
 The iPhone app is intentionally thin. It does not manage the library itself.
@@ -24,14 +25,14 @@ back to that helper.
 
 ## Functional View Of The App
 
-From the user perspective, the app has three functional areas:
+From the user perspective, the app now has three functional areas:
 
 - connection/settings
-  Store the helper URL and token.
+  Store the helper URL and token from a secondary settings flow.
 - library browsing
-  Show the indexed items returned by the helper.
+  Show the indexed items returned by the helper as the app's primary home.
 - item playback
-  Request a stream URL, play the file, and report progress.
+  Request a stream URL, force landscape playback, and report progress.
 
 The UI itself is deliberately simple. The important part is the loop between:
 
@@ -70,13 +71,17 @@ The app mostly revolves around these helper calls:
 - `Services/AppConfigurationStore.swift`
   stores the helper URL/token locally on the device
 - `Views/RootView.swift`
-  decides whether the app shows connection setup or the main tabs
+  decides whether the app shows onboarding connection setup or the library-first shell
 - `Views/LibraryView.swift`
-  shows the indexed media list
+  shows the indexed media list with a compact custom header and opens settings as a secondary action
 - `Views/MediaDetailView.swift`
-  shows a single item and starts playback
+  shows a single item in a compact detail surface and starts full-screen playback
+- `Views/FullScreenPlayerView.swift`
+  presents the active player with the native AVKit playback UI and landscape playback
+- `Services/OrientationController.swift`
+  coordinates portrait app behavior with landscape-only media playback
 - `ViewModels/PlayerViewModel.swift`
-  manages the player and periodic progress sync
+  manages player lifecycle, seeking, and progress sync
 
 ## Opening in Xcode
 
@@ -101,5 +106,5 @@ If the Windows PC IP or token changes later, either edit those values in the app
 
 - The app expects the helper to be reachable on the same home network.
 - The current setup allows plain HTTP for local LAN testing.
-- The app is intentionally light on UI complexity; most of the real behavior
-  lives in the helper and its stored data.
+- The app is intentionally still lightweight, but playback now uses the
+  standard iPhone player UI instead of a custom control surface.

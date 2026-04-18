@@ -107,7 +107,7 @@ append-only events.
 ## Current Status
 
 - Windows helper: runnable, tested, and scanning your configured media library.
-- iPhone client: checked-in Xcode project under `ios-app/`, with the current LAN helper URL/token preloaded for personal-device testing.
+- iPhone client: checked-in Xcode project under `ios-app/`, with the current LAN helper URL/token preloaded for personal-device testing, a compact library-first flow, and a landscape playback screen built on Apple's standard AVKit player UI.
 
 ## Current v1 Boundaries
 
