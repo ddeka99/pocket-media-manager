@@ -77,6 +77,13 @@ struct APIClient {
         return try decoder.decode(HealthResponse.self, from: data)
     }
 
+    func fetchLibrarySummary() async throws -> LibrarySummaryResponse {
+        let request = try makeRequest(path: "library/summary")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: data)
+        return try decoder.decode(LibrarySummaryResponse.self, from: data)
+    }
+
     func fetchLibrary() async throws -> [MediaItem] {
         let request = try makeRequest(path: "library")
         let (data, response) = try await URLSession.shared.data(for: request)

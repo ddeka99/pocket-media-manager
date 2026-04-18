@@ -28,7 +28,7 @@ final class PlayerViewModel: ObservableObject {
             let player = AVPlayer(url: url)
             if let resumeTime = item.playback?.positionSeconds, resumeTime > 0 {
                 let target = CMTime(seconds: resumeTime, preferredTimescale: 600)
-                player.seek(to: target)
+                _ = await player.seek(to: target)
             }
             self.player = player
             player.play()

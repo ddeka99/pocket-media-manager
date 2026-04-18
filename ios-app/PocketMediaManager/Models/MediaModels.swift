@@ -99,3 +99,17 @@ struct HealthResponse: Codable {
         case libraryCount = "library_count"
     }
 }
+
+struct LibrarySummaryResponse: Codable {
+    let mediaRoot: String?
+    let totalItems: Int
+    let directPlayItems: Int
+    let incompatibleItems: Int
+
+    enum CodingKeys: String, CodingKey {
+        case mediaRoot = "media_root"
+        case totalItems = "total_items"
+        case directPlayItems = "direct_play_items"
+        case incompatibleItems = "incompatible_items"
+    }
+}
