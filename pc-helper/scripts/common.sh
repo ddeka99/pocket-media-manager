@@ -4,7 +4,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-PROJECT_DIR_WIN="$(cygpath -w "${PROJECT_DIR}")"
 VENV_DIR="${PROJECT_DIR}/.venv"
 VENV_DIR_WIN="$(cygpath -w "${VENV_DIR}")"
 VENV_PYTHON="${VENV_DIR}/Scripts/python.exe"
@@ -45,5 +44,22 @@ get_token() {
 }
 
 active_ipv4() {
-  powershell.exe -NoProfile -Command "(Get-NetIPConfiguration | Where-Object { \$_.NetAdapter.Status -eq 'Up' -and \$_.IPv4Address -and \$_.IPv4DefaultGateway } | Select-Object -First 1 -ExpandProperty IPv4Address).IPAddress" | tr -d '\r'
+  "${VENV_PYTHON}" - <<'PY'
+import re
+import subprocess
+import sys
+
+output = subprocess.check_output(["ipconfig"], text=True, encoding="utf-8", errors="replace")
+blocks = re.split(r"\r?\n\r?\n", output)
+for block in blocks:
+    if "Media disconnected" in block:
+        continue
+    if "Default Gateway" not in block:
+        continue
+    match = re.search(r"IPv4 Address[^\n]*:\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)", block)
+    if match:
+        print(match.group(1))
+        sys.exit(0)
+sys.exit(1)
+PY
 }

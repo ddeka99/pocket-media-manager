@@ -68,8 +68,8 @@ bash ./scripts/test.sh
 ## Notes
 
 - The helper keeps its local state in `pc-helper/data/library.db`.
+- Personal SQLite scratch queries can live in `pc-helper/scratch/`.
 - Git Bash is now the preferred Windows shell for the helper workflow.
-- The older `.ps1` scripts still exist if you ever want the PowerShell path.
 - Important code paths:
   - `app/main.py`: HTTP routes
   - `app/scanner.py`: folder walk and indexing
