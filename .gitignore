@@ -1,16 +1,8 @@
-.DS_Store
-Thumbs.db
-
-.pytest_cache/
+.venv/
 __pycache__/
-*.py[cod]
+.pytest_cache/
+*.pyc
 
-pc-helper/.venv/
-pc-helper/data/
-pc-helper/scratch/
-
-.idea/
-.vscode/
-
-*.xcuserstate
-xcuserdata/
+pc-helper/.env
+pc-helper/_mpv_prefs.json
+pc-helper/.tmp/

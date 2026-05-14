@@ -1,18 +1,41 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
 
-source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
 
-python_path="$(find_real_python || true)"
-[[ -n "${python_path}" ]] || die "Could not find a real Python interpreter for Git Bash."
+find_python() {
+  if [[ -n "${PYTHON:-}" ]]; then
+    printf '%s\n' "$PYTHON"
+    return 0
+  fi
 
-echo "Using Python at $(cygpath -w "${python_path}")"
+  local candidate
+  for name in python python3 py; do
+    while IFS= read -r candidate; do
+      [[ -z "$candidate" ]] && continue
+      [[ "$candidate" == *"/WindowsApps/"* ]] && continue
+      if "$candidate" --version >/dev/null 2>&1; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+    done < <(which -a "$name" 2>/dev/null || true)
+  done
 
-"${python_path}" -m venv "${VENV_DIR_WIN}"
-"${VENV_PYTHON}" -m pip install --upgrade pip
-"${VENV_PYTHON}" -m pip install -r "$(cygpath -w "${PROJECT_DIR}/requirements.txt")"
+  return 1
+}
 
-echo
-echo "Bootstrap complete."
-echo "Run bash ./scripts/run-dev.sh from pc-helper to start the API."
+if ! PYTHON_BIN="$(find_python)"; then
+  echo "Python was not found. Install Python 3.11+ and make sure a real python is available in Git Bash." >&2
+  echo "You can also run: PYTHON=/path/to/python ./scripts/bootstrap.sh" >&2
+  exit 1
+fi
+
+"$PYTHON_BIN" -m venv .venv
+./.venv/Scripts/python.exe -m pip install --upgrade pip
+./.venv/Scripts/python.exe -m pip install -r requirements.txt
+
+if [[ ! -f .env ]]; then
+  cp .env.example .env
+  echo "Created .env from .env.example. Update PUBLIC_BASE_URL with this PC's LAN IP before phone testing."
+fi

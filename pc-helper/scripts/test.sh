@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
 
-source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
 
-require_venv_python
+if [[ ! -x ./.venv/Scripts/python.exe ]]; then
+  echo "Virtual environment not found. Run ./scripts/bootstrap.sh first." >&2
+  exit 1
+fi
 
-cd "${PROJECT_DIR}"
-"${VENV_PYTHON}" -m pytest
+mkdir -p .tmp/pytest
+TMPDIR="$ROOT/.tmp" TEMP="$ROOT/.tmp" TMP="$ROOT/.tmp" ./.venv/Scripts/python.exe -m pytest --basetemp="$ROOT/.tmp/pytest"

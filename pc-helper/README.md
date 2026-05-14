@@ -1,218 +1,176 @@
 # Pocket Media Manager PC Helper
 
-This service indexes a Windows media folder, serves direct-play video files
-over your local network, and stores playback plus feedback events in SQLite.
+This helper runs on the Windows PC that stores your media. It scans your media
+folder, chooses a weighted recommendation using your existing rules, serves the
+chosen file over the local network, and accepts simple phone feedback.
 
-## What The Helper Is Doing
+Playback itself is delegated to Infuse or VLC. The helper is the recommendation
+and streaming bridge, not a custom video player.
 
-The helper is the backend brain of the project.
+## How The Pieces Connect
 
-Functionally, it has four jobs:
+1. Your phone calls `GET /next`.
+2. The helper scans `MEDIA_ROOT`, loads `_mpv_prefs.json`, and picks a video.
+3. The helper records play count and `last_played` immediately.
+4. The helper creates a temporary stream token.
+5. The phone opens the returned `infuse_url`, or opens `stream_url` manually in
+   Infuse/VLC.
+6. After watching, phone shortcuts call `/feedback/like`, `/feedback/dislike`,
+   or `/feedback/pending`.
 
-1. remember where the media library lives on the PC
-2. scan that folder and build an indexed library
-3. serve playable files over HTTP to the iPhone app
-4. store user behavior such as resume position and simple feedback
+Plex can stay installed for normal library playback, but this workflow does not
+depend on Plex. It exists to preserve your custom recommendation behavior.
 
-The helper is intentionally stateful. It is not just a passthrough file server.
-It keeps a local database so the phone can behave like a media app rather than
-just a remote file browser.
+## Setup
 
-## Quick start
-
-1. Open Git Bash in `pc-helper/`.
-2. Bootstrap the local environment:
-
-```bash
-bash ./scripts/bootstrap.sh
-```
-
-3. Run the API:
+From Git Bash:
 
 ```bash
-bash ./scripts/run-dev.sh
+cd C:\Dev\pocket-media-manager\pc-helper
+./scripts/bootstrap.sh
 ```
 
-4. Call `GET /pairing` to read the local API token.
-5. Call `PUT /config` with the token and your media root path.
-6. Call `POST /library/rescan` to build the library index.
+The bootstrap script creates `.venv`, installs dependencies, and creates `.env`
+from `.env.example` if needed.
 
-## What A User Actually Experiences
+Edit `.env`:
 
-When the helper is running, the real user journey is:
+```text
+MEDIA_ROOT=E:\Hobby Disk
+PUBLIC_BASE_URL=http://192.168.1.50:8787
+SERVER_HOST=0.0.0.0
+SERVER_PORT=8787
+PREFS_FILE=./_mpv_prefs.json
+SUPPORTED_EXTENSIONS=.mp4,.mkv,.mov,.avi,.webm
+EXCLUDE_FOLDERS=
+```
 
-1. the app connects with a helper URL and token
-2. the app asks for the indexed library
-3. the user opens an item
-4. the app asks the helper for a stream URL
-5. the helper serves the actual file
-6. the app periodically saves progress
-7. the helper stores that progress and returns it later as the resume point
+`PUBLIC_BASE_URL` must use the PC's LAN IP, not `localhost`, because the phone
+needs to reach the PC.
 
-So from the user side, the helper mainly shows up as:
+Find the LAN IP from Windows:
 
-- a library that loads
-- a video that starts playing
-- a video that resumes where it was left off
-- a system that remembers simple reactions
+```text
+ipconfig
+```
 
-## Main flow
+Look for the IPv4 address on the active Wi-Fi or Ethernet adapter.
 
-1. `GET /pairing`
-   Read the local token used by the iPhone app and admin scripts.
-2. `PUT /config`
-   Store the Windows media root that should be scanned.
-3. `POST /library/rescan`
-   Walk the media root, extract metadata, and update the SQLite index.
-4. `GET /library`
-   Return the full media list used by the iPhone app.
-5. `POST /library/{id}/stream`
-   Return a stream URL for playback.
-6. `POST /library/{id}/progress` and `POST /library/{id}/feedback`
-   Save watch progress and simple preference signals.
+## Run
 
-## Route-Level Meaning
+```bash
+./scripts/run-dev.sh
+```
 
-These are the most important endpoints in plain language:
+The default development server listens on:
+
+```text
+http://0.0.0.0:8787
+```
+
+Useful checks:
+
+```text
+http://localhost:8787/health
+http://localhost:8787/next
+http://localhost:8787/last
+```
+
+If the phone cannot reach `/health`, allow Python/Uvicorn through Windows
+Firewall for private networks and confirm the phone is on the same Wi-Fi.
+
+## Phone Shortcuts
+
+Create a shortcut named `Next Recommended Video`:
+
+1. Get contents of URL:
+
+```text
+http://<PC_LAN_IP>:8787/next
+```
+
+2. Get `infuse_url` from the JSON response.
+3. Open URL.
+
+If you want the shortest possible shortcut, open this URL directly:
+
+```text
+http://<PC_LAN_IP>:8787/next?redirect=infuse
+```
+
+Create feedback shortcuts:
+
+```text
+POST http://<PC_LAN_IP>:8787/feedback/like
+POST http://<PC_LAN_IP>:8787/feedback/dislike
+POST http://<PC_LAN_IP>:8787/feedback/pending
+```
+
+Feedback applies to the last recommendation made by the running helper process.
+If the helper restarts before feedback is sent, `/feedback/...` will not know
+which item was last recommended.
+
+## API
 
 - `GET /health`
-  Quick status check. Used to confirm the helper is alive and how many library
-  items are currently indexed.
-- `GET /pairing`
-  Returns the local API token. The phone uses that token in later requests.
-- `PUT /config`
-  Tells the helper which Windows folder should be treated as the media root.
-- `POST /library/rescan`
-  Rebuilds the library index by walking the media root.
-- `GET /library`
-  Returns the full browsable media list.
-- `GET /library/summary`
-  Returns short operational information such as item counts and top folders.
-- `POST /library/{id}/stream`
-  Creates the direct playback URL used by the app.
-- `POST /library/{id}/progress`
-  Saves the latest watch position.
-- `POST /library/{id}/feedback`
-  Saves simple feedback events.
+  Returns `{"ok": true}`.
+- `GET /next`
+  Picks and records a recommendation, then returns `stream_url`, `infuse_url`,
+  and feedback URLs.
+- `GET /next?redirect=infuse`
+  Picks and records a recommendation, then redirects straight to Infuse.
+- `GET /stream/{token}`
+  Streams a token-mapped file. Unknown tokens, missing files, and paths outside
+  `MEDIA_ROOT` return 404.
+- `POST /feedback/like`
+  Adds one like to the last recommended file.
+- `POST /feedback/dislike`
+  Adds one dislike to the last recommended file.
+- `POST /feedback/pending`
+  Adds one pending/save-for-later mark to the last recommended file.
+- `GET /last`
+  Returns the last recommended file and its preference metadata.
 
-## Small operator commands
+## Recommendation Data
 
-With the helper already running:
+Preferences are stored in `_mpv_prefs.json` by default. The JSON shape matches
+the original PC script:
 
-```bash
-bash ./scripts/admin.sh
+```json
+{
+  "files": {
+    "E:\\Hobby Disk\\Example\\video.mp4": {
+      "likes": 0,
+      "dislikes": 0,
+      "pending": 0,
+      "play_count": 0,
+      "last_played": null,
+      "last_feedback": null
+    }
+  }
+}
 ```
 
-Rescan and print a short summary:
+If the preference file is missing, the helper creates it. If it is corrupted,
+the helper recovers with an empty in-memory preference set and writes a clean
+file the next time preferences are saved.
 
-```bash
-bash ./scripts/admin.sh --rescan
-```
+## Safety Notes
 
-Check the Wi-Fi URL and pairing token that the iPhone app should use:
+This server is for your private home network only. Do not expose it to the
+public internet.
 
-```bash
-bash ./scripts/lan-check.sh
-```
+The helper does not accept arbitrary file paths from the phone. It only streams
+files selected by the recommendation engine, behind opaque stream tokens, and
+it verifies streamed files are under `MEDIA_ROOT`.
 
 ## Testing
 
-Run the backend tests with:
+Run:
 
 ```bash
-bash ./scripts/test.sh
+./scripts/test.sh
 ```
 
-## Underlying Logic
-
-### Scanning
-
-During a rescan, the helper:
-
-1. walks the configured media root recursively
-2. keeps only files that look like supported video containers
-3. derives a stable media ID from the relative path
-4. extracts local metadata with `ffprobe` when available
-5. marks items as compatible or incompatible for direct iPhone playback
-6. updates the SQLite index
-
-Files that are not video-like are ignored. Files such as `.mkv` can still be
-indexed, but they are marked incompatible for v1 direct playback.
-
-### Playback
-
-When the user presses Play:
-
-1. the app requests `/library/{id}/stream`
-2. the helper returns a signed-ish local stream URL containing the token
-3. the app uses the native iPhone player against that URL
-4. the helper serves the file directly
-
-### Resume
-
-While the user is watching, the app periodically sends playback position to
-`/library/{id}/progress`.
-
-The helper stores that in two ways:
-
-- `playback_state`
-  latest known position for quick resume
-- `playback_events`
-  history of progress updates over time
-
-That is why resume feels immediate while still preserving a behavior trail for
-future analytics or recommendations.
-
-### Feedback
-
-Feedback is intentionally simple in v1:
-
-- liked
-- disliked
-- save for later
-
-These are stored as events rather than a complicated preference model. That
-keeps the current experience lightweight while still producing useful data for a
-later recommendation layer.
-
-## Data You Can Inspect
-
-The main SQLite database is:
-
-- `pc-helper/data/library.db`
-
-The most useful tables are:
-
-- `media_items`
-- `playback_state`
-- `playback_events`
-- `feedback_events`
-- `scan_jobs`
-
-Personal scratch SQL files can live in:
-
-- `pc-helper/scratch/`
-
-That folder is ignored by git so you can experiment freely.
-
-## Important Code Paths
-
-- Git Bash is now the preferred Windows shell for the helper workflow.
-- `app/main.py`
-  Defines the HTTP API and glues requests to the scanner and database.
-- `app/scanner.py`
-  Walks the filesystem and converts files into indexed media records.
-- `app/media.py`
-  Derives titles, checks compatibility, and calls `ffprobe`.
-- `app/storage.py`
-  Owns SQLite reads and writes.
-- For your current Windows session, the helper is reachable on the local Wi-Fi at
-  `http://10.0.0.235:8765` while that IPv4 address remains the same.
-- If `python` or `py` still resolves to a Windows Store stub in this shell,
-  disable the App Execution Aliases for Python or restart the terminal after
-  installation.
-- `ffprobe` is optional. If it is on `PATH`, the helper will enrich duration
-  and codec metadata.
-- v1 only marks `.mp4`, `.m4v`, and `.mov` as iPhone direct-play compatible.
-- Streaming uses FastAPI's file response path, which supports byte-range
-  requests via Starlette.
+The tests use temporary media folders and preference files, so they do not
+modify your real media library or your real `_mpv_prefs.json`.

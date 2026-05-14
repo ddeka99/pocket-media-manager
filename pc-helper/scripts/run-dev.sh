@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
 
-source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
 
-host="${1:-0.0.0.0}"
-port="${2:-8765}"
+if [[ ! -x ./.venv/Scripts/python.exe ]]; then
+  echo "Virtual environment not found. Run ./scripts/bootstrap.sh first." >&2
+  exit 1
+fi
 
-require_venv_python
-
-cd "${PROJECT_DIR}"
-"${VENV_PYTHON}" -m uvicorn app.main:app --reload --host "${host}" --port "${port}"
+./.venv/Scripts/python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8787 --reload

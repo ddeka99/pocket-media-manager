@@ -15,10 +15,8 @@ of work. Do not treat documentation as optional follow-up polish.
 Whenever a meaningful change is introduced, update the appropriate README files
 to reflect it. This includes changes to:
 
-- user-visible features
 - current limitations or known issues
 - setup or run workflows
-- how the Windows helper and iPhone app interact
 - important stored data or behavior flow
 - new scripts, commands, or operational steps
 
@@ -33,16 +31,6 @@ Prefer documentation that explains:
 
 Avoid excessive low-level code commentary unless it is needed to understand the
 functional behavior of the system.
-
-## Documentation Targets
-
-- `README.md`
-  Keep this as the high-level product and architecture overview.
-- `pc-helper/README.md`
-  Explain backend/helper behavior, routes, storage, scripts, and operator flow.
-- `ios-app/README.md`
-  Explain the iPhone app at a functional level and its relationship to the
-  helper.
 
 ## Default Rule For Future Changes
 
