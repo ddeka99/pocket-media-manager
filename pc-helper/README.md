@@ -89,6 +89,14 @@ Logs are appended to:
 pc-helper\.tmp\server.log
 ```
 
+If you edit `.env` after the startup task is installed, restart the task from an
+elevated PowerShell so the running helper loads the new settings:
+
+```powershell
+Stop-ScheduledTask -TaskName "Pocket Media Manager PC Helper"
+Start-ScheduledTask -TaskName "Pocket Media Manager PC Helper"
+```
+
 If you want to stop the always-on helper before development work, remove the
 scheduled task from an elevated PowerShell:
 
@@ -138,6 +146,10 @@ The main phone workflow is the helper home page:
 ```text
 http://<PC_LAN_IP>:8787/
 ```
+
+The home page shows the current `EXCLUDE_FOLDERS` setting below the action
+buttons. These names are skipped by normal recommendations and do not appear as
+top-level choices in `Recommend with Selections`.
 
 Tap `Recommend`. The helper selects a video, records the play, opens Infuse or
 VLC depending on `PLAYER`, and leaves the browser on a feedback page.

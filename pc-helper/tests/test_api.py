@@ -17,7 +17,7 @@ def configure_env(monkeypatch, tmp_path: Path) -> tuple[Path, Path]:
     monkeypatch.setenv("PUBLIC_BASE_URL", "http://192.168.1.50:8787")
     monkeypatch.setenv("SUPPORTED_EXTENSIONS", ".mp4,.mkv")
     monkeypatch.setenv("PLAYER", "infuse")
-    monkeypatch.delenv("EXCLUDE_FOLDERS", raising=False)
+    monkeypatch.setenv("EXCLUDE_FOLDERS", "")
     state.clear_state()
     return media_root, prefs_file
 
@@ -59,6 +59,21 @@ def test_home_shows_recommend_and_reset(monkeypatch, tmp_path):
     assert "Recommend" in response.text
     assert "Recommend with Selections" in response.text
     assert "Reset Preferences" in response.text
+    assert "Excluded folders" in response.text
+    assert "No excluded folders configured." in response.text
+
+
+def test_home_lists_configured_excluded_folders(monkeypatch, tmp_path):
+    configure_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("EXCLUDE_FOLDERS", "Trailers,Behind the Scenes")
+    client = TestClient(app)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Excluded folders" in response.text
+    assert "<li>Behind the Scenes</li>" in response.text
+    assert "<li>Trailers</li>" in response.text
 
 
 def test_browser_recommend_returns_feedback_page_with_infuse_opener(monkeypatch, tmp_path):

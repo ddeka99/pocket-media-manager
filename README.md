@@ -50,6 +50,14 @@ After that, the helper starts automatically when Windows starts, before you sign
 in. It runs without development reload mode, which is better for leaving it
 available to your phone while the PC is awake.
 
+When you edit `pc-helper\.env`, restart the scheduled task from an elevated
+PowerShell so the running helper loads the new settings:
+
+```powershell
+Stop-ScheduledTask -TaskName "Pocket Media Manager PC Helper"
+Start-ScheduledTask -TaskName "Pocket Media Manager PC Helper"
+```
+
 For active development, stop that always-on task and then run the development
 server:
 
@@ -82,7 +90,8 @@ http://<PC_LAN_IP>:8787/
 
 Tap `Recommend` to open the configured player. Use `Recommend with Selections`
 when you want to choose one or more top-level folders under `MEDIA_ROOT` for a
-single recommendation. When you switch back to the browser, choose Like,
-Dislike, Pending, or Skip.
+single recommendation. The home page also shows the folder names configured in
+`EXCLUDE_FOLDERS`, so you can quickly confirm what is being skipped. When you
+switch back to the browser, choose Like, Dislike, Pending, or Skip.
 
 See `pc-helper/README.md` for the full setup and phone workflow.

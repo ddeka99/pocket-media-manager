@@ -42,9 +42,21 @@ def _page(title: str, body: str) -> HTMLResponse:
     }}
     h1 {{ font-size: 1.45rem; margin: 0; }}
     p {{ margin: 0; line-height: 1.4; color: #555; }}
+    ul {{ margin: 0; padding-left: 1.2rem; color: #555; }}
+    li {{ line-height: 1.4; }}
     form {{ margin: 0; }}
     .stack {{ display: grid; gap: .7rem; }}
     .row {{ display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; }}
+    .status {{
+      border-top: 1px solid #d8d8d2;
+      padding-top: 1rem;
+      display: grid;
+      gap: .45rem;
+    }}
+    .label {{
+      color: #181818;
+      font-weight: 650;
+    }}
     button, a.button {{
       width: 100%;
       box-sizing: border-box;
@@ -120,14 +132,24 @@ def _wants_html(request: Request) -> bool:
     return "text/html" in accept and "application/json" not in accept
 
 
-def _home_page() -> HTMLResponse:
+def _excluded_folders_html(settings: Settings) -> str:
+    folders = sorted(settings.exclude_folders, key=str.lower)
+    if not folders:
+        return '<p>No excluded folders configured.</p>'
+
+    items = "\n".join(f"<li>{escape(folder)}</li>" for folder in folders)
+    return f"<ul>{items}</ul>"
+
+
+def _home_page(settings: Settings) -> HTMLResponse:
     last_recommended = state.get_last_recommended()
     if state.is_awaiting_feedback() and last_recommended is not None:
         return _feedback_page(last_recommended.name)
 
+    excluded_folders = _excluded_folders_html(settings)
     return _page(
         "Pocket Media Manager",
-        """<h1>Pocket Media Manager</h1>
+        f"""<h1>Pocket Media Manager</h1>
 <div class="stack">
   <form method="post" action="/recommend">
     <button type="submit">Recommend</button>
@@ -138,7 +160,11 @@ def _home_page() -> HTMLResponse:
   <form method="get" action="/reset">
     <button class="secondary" type="submit">Reset Preferences</button>
   </form>
-</div>""",
+</div>
+<section class="status">
+  <p class="label">Excluded folders</p>
+  {excluded_folders}
+</section>""",
     )
 
 
@@ -274,7 +300,7 @@ def health() -> dict[str, bool]:
 
 @app.get("/", response_class=HTMLResponse)
 def home() -> HTMLResponse:
-    return _home_page()
+    return _home_page(_settings())
 
 
 @app.post("/recommend", response_class=HTMLResponse)
