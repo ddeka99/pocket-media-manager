@@ -62,17 +62,59 @@ ipconfig
 
 Look for the IPv4 address on the active Wi-Fi or Ethernet adapter.
 
-## Run
+## Everyday Windows Startup
+
+For normal phone use, run the helper as a Windows scheduled task instead of
+keeping a development terminal open. This starts the server when Windows boots,
+before you sign in, and keeps it available while the PC is awake.
+
+From an elevated PowerShell in `pc-helper`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-startup-task.ps1
+```
+
+The task runs `scripts\run-server.ps1`, which starts Uvicorn without
+development reload mode. The scheduled task runs as Windows `SYSTEM`, so it does
+not depend on your account being signed in. It reads `SERVER_HOST` and
+`SERVER_PORT` from `.env`, defaulting to:
+
+```text
+http://0.0.0.0:8787
+```
+
+Logs are appended to:
+
+```text
+pc-helper\.tmp\server.log
+```
+
+If you want to stop the always-on helper before development work, remove the
+scheduled task from an elevated PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\remove-startup-task.ps1
+```
+
+Install it again with `install-startup-task.ps1` when you want to return to the
+always-on phone workflow.
+
+You can also run the normal no-reload server manually:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-server.ps1
+```
+
+## Development Run
+
+Use the development server when changing the app code:
 
 ```bash
 ./scripts/run-dev.sh
 ```
 
-The default development server listens on:
-
-```text
-http://0.0.0.0:8787
-```
+This starts Uvicorn with reload enabled, which is useful while editing code but
+is not the preferred mode for daily phone playback.
 
 Useful checks:
 
@@ -84,7 +126,10 @@ http://localhost:8787/last
 ```
 
 If the phone cannot reach `/health`, allow Python/Uvicorn through Windows
-Firewall for private networks and confirm the phone is on the same Wi-Fi.
+Firewall for private networks and confirm the phone is on the same Wi-Fi. If the
+boot task starts but recommendations find no media, confirm that `MEDIA_ROOT` is
+a local drive available before sign-in; mapped network drives usually belong to a
+signed-in user session and are not visible to `SYSTEM`.
 
 ## Phone Browser Flow
 

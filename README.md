@@ -39,10 +39,32 @@ PLAYER=infuse
 
 Use `PLAYER=vlc` to test VLC instead.
 
-Run the helper:
+For everyday phone use, install the Windows startup task once from an elevated
+PowerShell opened in `pc-helper`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-startup-task.ps1
+```
+
+After that, the helper starts automatically when Windows starts, before you sign
+in. It runs without development reload mode, which is better for leaving it
+available to your phone while the PC is awake.
+
+For active development, stop that always-on task and then run the development
+server:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\remove-startup-task.ps1
+```
 
 ```bash
 ./scripts/run-dev.sh
+```
+
+You can also run the normal no-reload server manually:
+
+```bash
+powershell -ExecutionPolicy Bypass -File .\scripts\run-server.ps1
 ```
 
 Test locally:
