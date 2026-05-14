@@ -137,6 +137,53 @@ def test_browser_feedback_redirects_home(monkeypatch, tmp_path):
     assert '"dislikes": 1' in prefs_file.read_text(encoding="utf-8")
 
 
+def test_selected_feedback_redirects_back_to_prechecked_selection(monkeypatch, tmp_path):
+    media_root, prefs_file = configure_env(monkeypatch, tmp_path)
+    anime = media_root / "Anime"
+    movies = media_root / "Movies"
+    anime.mkdir()
+    movies.mkdir()
+    (anime / "episode.mp4").write_bytes(b"fake anime")
+    (movies / "movie.mp4").write_bytes(b"fake movie")
+    client = TestClient(app, follow_redirects=False)
+    client.post(
+        "/recommend/selected",
+        data={"folders": "Anime"},
+        headers={"accept": "text/html"},
+    )
+
+    response = client.post("/feedback/like", headers={"accept": "text/html"})
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/select"
+    assert '"likes": 1' in prefs_file.read_text(encoding="utf-8")
+
+    selection_response = client.get("/select")
+    assert selection_response.status_code == 200
+    assert 'value="Anime" checked' in selection_response.text
+    assert 'value="Movies" checked' not in selection_response.text
+
+
+def test_selection_cancel_clears_saved_folders_and_returns_home(monkeypatch, tmp_path):
+    media_root, _ = configure_env(monkeypatch, tmp_path)
+    anime = media_root / "Anime"
+    anime.mkdir()
+    (anime / "episode.mp4").write_bytes(b"fake anime")
+    client = TestClient(app, follow_redirects=False)
+    client.post(
+        "/recommend/selected",
+        data={"folders": "Anime"},
+        headers={"accept": "text/html"},
+    )
+
+    response = client.post("/select/cancel", headers={"accept": "text/html"})
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+    selection_response = client.get("/select")
+    assert 'value="Anime" checked' not in selection_response.text
+
+
 def test_skip_feedback_does_not_change_preference_counts(monkeypatch, tmp_path):
     media_root, prefs_file = configure_env(monkeypatch, tmp_path)
     (media_root / "video.mp4").write_bytes(b"fake media")

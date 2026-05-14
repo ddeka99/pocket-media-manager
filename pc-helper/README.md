@@ -162,6 +162,11 @@ selected folders. For example, selecting `Anime` can still recommend files under
 `Anime\Attack on Titan`, while `Attack on Titan` itself is not shown as a
 checkbox.
 
+After feedback for a selected recommendation, the browser returns to the
+selection page with the same folders still checked. This lets you keep asking
+for recommendations from the same subset. Use `Cancel` on the selection page to
+clear that saved selection and return to the home page.
+
 When you switch back to the browser, choose:
 
 - `Like`

@@ -168,7 +168,11 @@ def _home_page(settings: Settings) -> HTMLResponse:
     )
 
 
-def _selection_page(settings: Settings, error: str | None = None) -> HTMLResponse:
+def _selection_page(
+    settings: Settings,
+    error: str | None = None,
+    selected_folder_names: list[str] | None = None,
+) -> HTMLResponse:
     folders = recommender.list_top_level_media_folders(
         settings.media_root,
         settings.supported_extensions,
@@ -179,13 +183,16 @@ def _selection_page(settings: Settings, error: str | None = None) -> HTMLRespons
             "Select Folders",
             """<h1>Recommend with Selections</h1>
 <p>No top-level folders with supported media were found.</p>
-<a class="button secondary" href="/">Back</a>""",
+<form method="post" action="/select/cancel">
+  <button class="secondary" type="submit">Back</button>
+</form>""",
         )
 
     error_html = f'<p style="color:#9d2020;">{escape(error)}</p>' if error else ""
+    selected_names = set(selected_folder_names if selected_folder_names is not None else state.get_selected_folder_names())
     folder_controls = "\n".join(
         f"""<label class="check">
-  <input type="checkbox" name="folders" value="{escape(folder.name, quote=True)}">
+  <input type="checkbox" name="folders" value="{escape(folder.name, quote=True)}"{' checked' if folder.name in selected_names else ''}>
   <span>{escape(folder.name)}</span>
 </label>"""
         for folder in folders
@@ -202,7 +209,9 @@ def _selection_page(settings: Settings, error: str | None = None) -> HTMLRespons
   </div>
   <button type="submit">Recommend</button>
 </form>
-<a class="button secondary" href="/">Cancel</a>""",
+<form method="post" action="/select/cancel">
+  <button class="secondary" type="submit">Cancel</button>
+</form>""",
     )
 
 
@@ -269,6 +278,7 @@ def _select_from_files(settings: Settings, files: list[Path]) -> dict[str, str]:
 
 
 def _select_next(settings: Settings) -> dict[str, str]:
+    state.clear_selected_folder_names()
     files = recommender.find_media_files(
         settings.media_root,
         settings.supported_extensions,
@@ -316,15 +326,22 @@ def select_folders() -> HTMLResponse:
     return _selection_page(_settings())
 
 
+@app.post("/select/cancel", response_model=None)
+def cancel_selected_folders() -> RedirectResponse:
+    state.clear_selected_folder_names()
+    state.set_awaiting_feedback(False)
+    return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @app.post("/recommend/selected", response_class=HTMLResponse)
 def recommend_from_selected_folders(folders: list[str] = Form(default=[])) -> HTMLResponse:
     settings = _settings()
     if not folders:
-        return _selection_page(settings, "Select at least one folder.")
+        return _selection_page(settings, "Select at least one folder.", folders)
 
     selected_folders = _selected_folder_paths(settings, folders)
     if not selected_folders:
-        return _selection_page(settings, "Select at least one available folder.")
+        return _selection_page(settings, "Select at least one available folder.", folders)
 
     files = recommender.find_media_files_in_folders(
         selected_folders,
@@ -332,8 +349,13 @@ def recommend_from_selected_folders(folders: list[str] = Form(default=[])) -> HT
         settings.exclude_folders,
     )
     if not files:
-        return _selection_page(settings, "No supported media files were found in the selected folders.")
+        return _selection_page(
+            settings,
+            "No supported media files were found in the selected folders.",
+            [folder.name for folder in selected_folders],
+        )
 
+    state.set_selected_folder_names([folder.name for folder in selected_folders])
     selected = _select_from_files(settings, files)
     return _feedback_page(selected["file_name"], selected["player_url"])
 
@@ -385,7 +407,8 @@ def _feedback_response(feedback: str, request: Request) -> dict[str, Any] | Redi
     state.set_awaiting_feedback(False)
 
     if _wants_html(request):
-        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+        redirect_path = "/select" if state.get_selected_folder_names() else "/"
+        return RedirectResponse(redirect_path, status_code=status.HTTP_303_SEE_OTHER)
     return {"ok": True, "feedback": feedback, "file_name": last_recommended.name}
 
 
