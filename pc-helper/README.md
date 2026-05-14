@@ -155,11 +155,12 @@ Tap `Recommend`. The helper selects a video, records the play, opens Infuse or
 VLC depending on `PLAYER`, and leaves the browser on a feedback page.
 
 Tap `Recommend with Selections` when you want to limit one recommendation to
-specific top-level folders under `MEDIA_ROOT`. The selection page only shows
-top-level folders that contain at least one supported media file, but files are
-found recursively inside those selected folders. For example, selecting `Anime`
-can still recommend files under `Anime\Attack on Titan`, while `Attack on
-Titan` itself is not shown as a checkbox.
+specific top-level folders under `MEDIA_ROOT`. The selection page shows the
+configured media root at the top, then only shows top-level folders that contain
+at least one supported media file. Files are found recursively inside those
+selected folders. For example, selecting `Anime` can still recommend files under
+`Anime\Attack on Titan`, while `Attack on Titan` itself is not shown as a
+checkbox.
 
 When you switch back to the browser, choose:
 

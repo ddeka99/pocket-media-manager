@@ -190,12 +190,13 @@ def _selection_page(settings: Settings, error: str | None = None) -> HTMLRespons
 </label>"""
         for folder in folders
     )
+    media_root_label = escape(str(settings.media_root))
     return _page(
         "Select Folders",
         f"""<h1>Recommend with Selections</h1>
 {error_html}
 <form method="post" action="/recommend/selected" class="stack">
-  <p>Folders in MEDIA_ROOT:</p>
+  <p>Folders in <em>{media_root_label}</em>:</p>
   <div class="stack">
     {folder_controls}
   </div>

@@ -89,8 +89,9 @@ http://<PC_LAN_IP>:8787/
 ```
 
 Tap `Recommend` to open the configured player. Use `Recommend with Selections`
-when you want to choose one or more top-level folders under `MEDIA_ROOT` for a
-single recommendation. The home page also shows the folder names configured in
+when you want to choose one or more top-level folders under the configured media
+root for a single recommendation. The selection page shows that media root at
+the top, and the home page shows the folder names configured in
 `EXCLUDE_FOLDERS`, so you can quickly confirm what is being skipped. When you
 switch back to the browser, choose Like, Dislike, Pending, or Skip.
 

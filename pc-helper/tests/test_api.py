@@ -206,6 +206,7 @@ def test_selection_page_lists_only_top_level_folders_with_media(monkeypatch, tmp
     response = client.get("/select")
 
     assert response.status_code == 200
+    assert f"Folders in <em>{media_root}</em>:" in response.text
     assert "Anime" in response.text
     assert "Attack on Titan" not in response.text
     assert "Empty" not in response.text
