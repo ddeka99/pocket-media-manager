@@ -9,14 +9,13 @@ and streaming bridge, not a custom video player.
 
 ## How The Pieces Connect
 
-1. Your phone calls `GET /next`.
+1. Your phone opens the helper home page and taps `Recommend`.
 2. The helper scans `MEDIA_ROOT`, loads `_mpv_prefs.json`, and picks a video.
 3. The helper records play count and `last_played` immediately.
 4. The helper creates a temporary stream token.
-5. The phone opens the returned `infuse_url`, or opens `stream_url` manually in
-   Infuse/VLC.
-6. After watching, phone shortcuts call `/feedback/like`, `/feedback/dislike`,
-   or `/feedback/pending`.
+5. The phone opens Infuse while the browser stays on a feedback page.
+6. After watching, you switch back to the browser and choose Like, Dislike,
+   Pending, or Skip.
 
 Plex can stay installed for normal library playback, but this workflow does not
 depend on Plex. It exists to preserve your custom recommendation behavior.
@@ -71,6 +70,7 @@ http://0.0.0.0:8787
 Useful checks:
 
 ```text
+http://localhost:8787/
 http://localhost:8787/health
 http://localhost:8787/next
 http://localhost:8787/last
@@ -79,9 +79,39 @@ http://localhost:8787/last
 If the phone cannot reach `/health`, allow Python/Uvicorn through Windows
 Firewall for private networks and confirm the phone is on the same Wi-Fi.
 
-## Phone Shortcuts
+## Phone Browser Flow
 
-Create a shortcut named `Next Recommended Video`:
+The main phone workflow is the helper home page:
+
+```text
+http://<PC_LAN_IP>:8787/
+```
+
+Tap `Recommend`. The helper selects a video, records the play, opens Infuse,
+and leaves the browser on a feedback page.
+
+When you switch back to the browser, choose:
+
+- `Like`
+  Boosts that file in future recommendations.
+- `Dislike`
+  Softly penalizes that file without banning it.
+- `Pending`
+  Marks it as something to revisit and gives it a smaller boost than Like.
+- `Skip`
+  Records no preference feedback. The play count and cooldown from the
+  recommendation are still already recorded.
+
+After any feedback choice, the browser returns to the home page and `Recommend`
+is available again.
+
+The home page also has `Reset Preferences`. It opens a confirmation page before
+clearing `_mpv_prefs.json` back to an empty preference database.
+
+## Optional Phone Shortcuts
+
+You can still use Shortcuts if you want. Create a shortcut named
+`Next Recommended Video`:
 
 1. Get contents of URL:
 
@@ -104,6 +134,7 @@ Create feedback shortcuts:
 POST http://<PC_LAN_IP>:8787/feedback/like
 POST http://<PC_LAN_IP>:8787/feedback/dislike
 POST http://<PC_LAN_IP>:8787/feedback/pending
+POST http://<PC_LAN_IP>:8787/feedback/skip
 ```
 
 Feedback applies to the last recommendation made by the running helper process.
@@ -114,6 +145,11 @@ which item was last recommended.
 
 - `GET /health`
   Returns `{"ok": true}`.
+- `GET /`
+  Returns the minimal browser control page.
+- `POST /recommend`
+  Browser action that selects a recommendation, opens Infuse, and shows
+  feedback buttons.
 - `GET /next`
   Picks and records a recommendation, then returns `stream_url`, `infuse_url`,
   and feedback URLs.
@@ -128,6 +164,12 @@ which item was last recommended.
   Adds one dislike to the last recommended file.
 - `POST /feedback/pending`
   Adds one pending/save-for-later mark to the last recommended file.
+- `POST /feedback/skip`
+  Clears the feedback step without changing preference counts.
+- `GET /reset`
+  Shows a confirmation page for resetting preferences.
+- `POST /reset`
+  Clears `_mpv_prefs.json` and resets in-memory recommendation state.
 - `GET /last`
   Returns the last recommended file and its preference metadata.
 

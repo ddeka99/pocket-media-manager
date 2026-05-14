@@ -42,6 +42,32 @@ def test_health_returns_ok(monkeypatch, tmp_path):
     assert response.json() == {"ok": True}
 
 
+def test_home_shows_recommend_and_reset(monkeypatch, tmp_path):
+    configure_env(monkeypatch, tmp_path)
+    client = TestClient(app)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Recommend" in response.text
+    assert "Reset Preferences" in response.text
+
+
+def test_browser_recommend_returns_feedback_page_with_infuse_opener(monkeypatch, tmp_path):
+    media_root, _ = configure_env(monkeypatch, tmp_path)
+    (media_root / "Browser Video.mp4").write_bytes(b"fake media")
+    client = TestClient(app)
+
+    response = client.post("/recommend", headers={"accept": "text/html"})
+
+    assert response.status_code == 200
+    assert "Feedback" in response.text
+    assert "Browser Video.mp4" in response.text
+    assert "infuse://x-callback-url/play?" in response.text
+    assert "/feedback/like" in response.text
+    assert "/feedback/skip" in response.text
+
+
 def test_next_last_and_feedback_update_prefs(monkeypatch, tmp_path):
     media_root, prefs_file = configure_env(monkeypatch, tmp_path)
     media_file = media_root / "Example Video.mp4"
@@ -73,6 +99,37 @@ def test_next_last_and_feedback_update_prefs(monkeypatch, tmp_path):
     assert '"last_feedback": "y"' in prefs_text
 
 
+def test_browser_feedback_redirects_home(monkeypatch, tmp_path):
+    media_root, prefs_file = configure_env(monkeypatch, tmp_path)
+    (media_root / "video.mp4").write_bytes(b"fake media")
+    client = TestClient(app, follow_redirects=False)
+    client.post("/recommend", headers={"accept": "text/html"})
+
+    response = client.post("/feedback/dislike", headers={"accept": "text/html"})
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+    assert '"dislikes": 1' in prefs_file.read_text(encoding="utf-8")
+
+
+def test_skip_feedback_does_not_change_preference_counts(monkeypatch, tmp_path):
+    media_root, prefs_file = configure_env(monkeypatch, tmp_path)
+    (media_root / "video.mp4").write_bytes(b"fake media")
+    client = TestClient(app)
+    client.post("/recommend", headers={"accept": "text/html"})
+
+    response = client.post("/feedback/skip")
+
+    assert response.status_code == 200
+    assert response.json()["feedback"] == "skip"
+    prefs_text = prefs_file.read_text(encoding="utf-8")
+    assert '"likes": 0' in prefs_text
+    assert '"dislikes": 0' in prefs_text
+    assert '"pending": 0' in prefs_text
+    assert '"play_count": 1' in prefs_text
+    assert '"last_feedback": null' in prefs_text
+
+
 def test_next_redirects_to_infuse(monkeypatch, tmp_path):
     media_root, _ = configure_env(monkeypatch, tmp_path)
     (media_root / "video.mp4").write_bytes(b"fake media")
@@ -101,6 +158,21 @@ def test_unknown_stream_token_returns_404(monkeypatch, tmp_path):
     response = client.get("/stream/not-a-token")
 
     assert response.status_code == 404
+
+
+def test_reset_preferences_clears_prefs_and_state(monkeypatch, tmp_path):
+    media_root, prefs_file = configure_env(monkeypatch, tmp_path)
+    (media_root / "video.mp4").write_bytes(b"fake media")
+    client = TestClient(app, follow_redirects=False)
+    client.post("/recommend", headers={"accept": "text/html"})
+    client.post("/feedback/like")
+
+    response = client.post("/reset", headers={"accept": "text/html"})
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+    assert prefs_file.read_text(encoding="utf-8") == '{\n  "files": {}\n}'
+    assert client.get("/last").status_code == 404
 
 
 def test_stream_serves_token_file(monkeypatch, tmp_path):
