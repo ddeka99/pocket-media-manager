@@ -13,7 +13,8 @@ and streaming bridge, not a custom video player.
 2. The helper scans `MEDIA_ROOT`, loads `_mpv_prefs.json`, and picks a video.
 3. The helper records play count and `last_played` immediately.
 4. The helper creates a temporary stream token.
-5. The phone opens Infuse while the browser stays on a feedback page.
+5. The phone opens the configured player while the browser stays on a feedback
+   page.
 6. After watching, you switch back to the browser and choose Like, Dislike,
    Pending, or Skip.
 
@@ -39,6 +40,7 @@ MEDIA_ROOT=E:\Hobby Disk
 PUBLIC_BASE_URL=http://192.168.1.50:8787
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8787
+PLAYER=infuse
 PREFS_FILE=./_mpv_prefs.json
 SUPPORTED_EXTENSIONS=.mp4,.mkv,.mov,.avi,.webm
 EXCLUDE_FOLDERS=
@@ -46,6 +48,11 @@ EXCLUDE_FOLDERS=
 
 `PUBLIC_BASE_URL` must use the PC's LAN IP, not `localhost`, because the phone
 needs to reach the PC.
+
+`PLAYER` controls which app the `Recommend` button opens. Supported values are
+`infuse` and `vlc`. Infuse is the default because it has already worked cleanly
+in this setup. Set `PLAYER=vlc` to try VLC with the same recommendation and
+feedback flow.
 
 Find the LAN IP from Windows:
 
@@ -87,8 +94,15 @@ The main phone workflow is the helper home page:
 http://<PC_LAN_IP>:8787/
 ```
 
-Tap `Recommend`. The helper selects a video, records the play, opens Infuse,
-and leaves the browser on a feedback page.
+Tap `Recommend`. The helper selects a video, records the play, opens Infuse or
+VLC depending on `PLAYER`, and leaves the browser on a feedback page.
+
+Tap `Recommend with Selections` when you want to limit one recommendation to
+specific top-level folders under `MEDIA_ROOT`. The selection page only shows
+top-level folders that contain at least one supported media file, but files are
+found recursively inside those selected folders. For example, selecting `Anime`
+can still recommend files under `Anime\Attack on Titan`, while `Attack on
+Titan` itself is not shown as a checkbox.
 
 When you switch back to the browser, choose:
 
@@ -119,7 +133,7 @@ You can still use Shortcuts if you want. Create a shortcut named
 http://<PC_LAN_IP>:8787/next
 ```
 
-2. Get `infuse_url` from the JSON response.
+2. Get `player_url` from the JSON response.
 3. Open URL.
 
 If you want the shortest possible shortcut, open this URL directly:
@@ -148,11 +162,11 @@ which item was last recommended.
 - `GET /`
   Returns the minimal browser control page.
 - `POST /recommend`
-  Browser action that selects a recommendation, opens Infuse, and shows
-  feedback buttons.
+  Browser action that selects a recommendation, opens the configured player,
+  and shows feedback buttons.
 - `GET /next`
   Picks and records a recommendation, then returns `stream_url`, `infuse_url`,
-  and feedback URLs.
+  configured `player`, `player_url`, and feedback URLs.
 - `GET /next?redirect=infuse`
   Picks and records a recommendation, then redirects straight to Infuse.
 - `GET /stream/{token}`

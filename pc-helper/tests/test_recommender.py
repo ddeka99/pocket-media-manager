@@ -67,6 +67,41 @@ def test_pick_weighted_returns_available_file(tmp_path):
     assert recommender.pick_weighted(files, prefs) in files
 
 
+def test_list_top_level_media_folders_only_returns_direct_children_with_media(tmp_path):
+    media_root = tmp_path / "media"
+    anime = media_root / "Anime"
+    nested = anime / "Attack on Titan"
+    empty = media_root / "Empty"
+    loose_file = media_root / "loose.mp4"
+    nested.mkdir(parents=True)
+    empty.mkdir(parents=True)
+    loose_file.write_text("fake", encoding="utf-8")
+    (nested / "episode.mp4").write_text("fake", encoding="utf-8")
+
+    folders = recommender.list_top_level_media_folders(media_root, {".mp4"})
+
+    assert folders == [anime]
+
+
+def test_find_media_files_in_folders_scans_selected_folders_recursively(tmp_path):
+    anime = tmp_path / "Anime"
+    reels = tmp_path / "Performer Reels"
+    movies = tmp_path / "Movies"
+    (anime / "Attack on Titan").mkdir(parents=True)
+    reels.mkdir()
+    movies.mkdir()
+    anime_file = anime / "Attack on Titan" / "episode.mp4"
+    reel_file = reels / "clip.mkv"
+    movie_file = movies / "movie.mp4"
+    anime_file.write_text("fake", encoding="utf-8")
+    reel_file.write_text("fake", encoding="utf-8")
+    movie_file.write_text("fake", encoding="utf-8")
+
+    files = recommender.find_media_files_in_folders([anime, reels], {".mp4", ".mkv"})
+
+    assert files == [anime_file, reel_file]
+
+
 def test_record_play_and_feedback_use_existing_json_shape(tmp_path):
     media_file = tmp_path / "video.mp4"
     media_file.write_text("fake", encoding="utf-8")

@@ -6,7 +6,7 @@ from html import escape
 import json
 from urllib.parse import urlencode
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, Form, HTTPException, Request, status
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from .config import Settings, get_settings
@@ -76,6 +76,17 @@ def build_infuse_url(stream_url: str, filename: str) -> str:
     return f"infuse://x-callback-url/play?{query}"
 
 
+def build_vlc_url(stream_url: str) -> str:
+    query = urlencode({"url": stream_url})
+    return f"vlc-x-callback://x-callback-url/stream?{query}"
+
+
+def build_player_url(settings: Settings, stream_url: str, filename: str) -> str:
+    if settings.player == "vlc":
+        return build_vlc_url(stream_url)
+    return build_infuse_url(stream_url, filename)
+
+
 def _is_under(path: Path, parent: Path) -> bool:
     try:
         path.resolve().relative_to(parent.resolve())
@@ -121,6 +132,9 @@ def _home_page() -> HTMLResponse:
   <form method="post" action="/recommend">
     <button type="submit">Recommend</button>
   </form>
+  <form method="get" action="/select">
+    <button class="secondary" type="submit">Recommend with Selections</button>
+  </form>
   <form method="get" action="/reset">
     <button class="secondary" type="submit">Reset Preferences</button>
   </form>
@@ -128,13 +142,50 @@ def _home_page() -> HTMLResponse:
     )
 
 
-def _feedback_page(file_name: str, infuse_url: str | None = None) -> HTMLResponse:
+def _selection_page(settings: Settings, error: str | None = None) -> HTMLResponse:
+    folders = recommender.list_top_level_media_folders(
+        settings.media_root,
+        settings.supported_extensions,
+        settings.exclude_folders,
+    )
+    if not folders:
+        return _page(
+            "Select Folders",
+            """<h1>Recommend with Selections</h1>
+<p>No top-level folders with supported media were found.</p>
+<a class="button secondary" href="/">Back</a>""",
+        )
+
+    error_html = f'<p style="color:#9d2020;">{escape(error)}</p>' if error else ""
+    folder_controls = "\n".join(
+        f"""<label class="check">
+  <input type="checkbox" name="folders" value="{escape(folder.name, quote=True)}">
+  <span>{escape(folder.name)}</span>
+</label>"""
+        for folder in folders
+    )
+    return _page(
+        "Select Folders",
+        f"""<h1>Recommend with Selections</h1>
+{error_html}
+<form method="post" action="/recommend/selected" class="stack">
+  <p>Folders in MEDIA_ROOT:</p>
+  <div class="stack">
+    {folder_controls}
+  </div>
+  <button type="submit">Recommend</button>
+</form>
+<a class="button secondary" href="/">Cancel</a>""",
+    )
+
+
+def _feedback_page(file_name: str, player_url: str | None = None) -> HTMLResponse:
     escaped_name = escape(file_name)
     opener = ""
     fallback = ""
-    if infuse_url:
-        escaped_url = escape(infuse_url, quote=True)
-        script_url = json.dumps(infuse_url)
+    if player_url:
+        escaped_url = escape(player_url, quote=True)
+        script_url = json.dumps(player_url)
         opener = f"""<script>
   setTimeout(function () {{
     window.location.href = {script_url};
@@ -161,16 +212,11 @@ def _feedback_page(file_name: str, infuse_url: str | None = None) -> HTMLRespons
     )
 
 
-def _select_next(settings: Settings) -> dict[str, str]:
-    files = recommender.find_media_files(
-        settings.media_root,
-        settings.supported_extensions,
-        settings.exclude_folders,
-    )
+def _select_from_files(settings: Settings, files: list[Path]) -> dict[str, str]:
     if not files:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No supported media files found under {settings.media_root}",
+            detail="No supported media files found",
         )
 
     prefs = _load_current_prefs(settings)
@@ -183,12 +229,42 @@ def _select_next(settings: Settings) -> dict[str, str]:
     state.set_awaiting_feedback(True)
     token = state.create_stream_token(selected)
     stream_url = _stream_url(settings, token)
+    infuse_url = build_infuse_url(stream_url, selected.name)
+    player_url = build_player_url(settings, stream_url, selected.name)
     return {
         "file_name": selected.name,
         "path": str(selected),
         "stream_url": stream_url,
-        "infuse_url": build_infuse_url(stream_url, selected.name),
+        "infuse_url": infuse_url,
+        "player": settings.player,
+        "player_url": player_url,
     }
+
+
+def _select_next(settings: Settings) -> dict[str, str]:
+    files = recommender.find_media_files(
+        settings.media_root,
+        settings.supported_extensions,
+        settings.exclude_folders,
+    )
+    if not files:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No supported media files found under {settings.media_root}",
+        )
+    return _select_from_files(settings, files)
+
+
+def _selected_folder_paths(settings: Settings, folder_names: list[str]) -> list[Path]:
+    eligible = {
+        folder.name: folder
+        for folder in recommender.list_top_level_media_folders(
+            settings.media_root,
+            settings.supported_extensions,
+            settings.exclude_folders,
+        )
+    }
+    return [eligible[name] for name in folder_names if name in eligible]
 
 
 @app.get("/health")
@@ -205,7 +281,34 @@ def home() -> HTMLResponse:
 def recommend_from_browser() -> HTMLResponse:
     settings = _settings()
     selected = _select_next(settings)
-    return _feedback_page(selected["file_name"], selected["infuse_url"])
+    return _feedback_page(selected["file_name"], selected["player_url"])
+
+
+@app.get("/select", response_class=HTMLResponse)
+def select_folders() -> HTMLResponse:
+    return _selection_page(_settings())
+
+
+@app.post("/recommend/selected", response_class=HTMLResponse)
+def recommend_from_selected_folders(folders: list[str] = Form(default=[])) -> HTMLResponse:
+    settings = _settings()
+    if not folders:
+        return _selection_page(settings, "Select at least one folder.")
+
+    selected_folders = _selected_folder_paths(settings, folders)
+    if not selected_folders:
+        return _selection_page(settings, "Select at least one available folder.")
+
+    files = recommender.find_media_files_in_folders(
+        selected_folders,
+        settings.supported_extensions,
+        settings.exclude_folders,
+    )
+    if not files:
+        return _selection_page(settings, "No supported media files were found in the selected folders.")
+
+    selected = _select_from_files(settings, files)
+    return _feedback_page(selected["file_name"], selected["player_url"])
 
 
 @app.get("/next", response_model=None)
@@ -219,6 +322,8 @@ def next_video(redirect: str | None = None) -> dict[str, Any] | RedirectResponse
         "file_name": selected["file_name"],
         "stream_url": selected["stream_url"],
         "infuse_url": selected["infuse_url"],
+        "player": selected["player"],
+        "player_url": selected["player_url"],
         "feedback": _feedback_urls(settings),
     }
 

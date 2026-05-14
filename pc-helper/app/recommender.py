@@ -92,6 +92,39 @@ def find_media_files(
     return files
 
 
+def list_top_level_media_folders(
+    media_root: Path,
+    supported_extensions: set[str],
+    exclude_folders: set[str] | None = None,
+) -> list[Path]:
+    exclude_folders = exclude_folders or set()
+    if not media_root.exists() or not media_root.is_dir():
+        return []
+
+    folders: list[Path] = []
+    for path in media_root.iterdir():
+        if not path.is_dir():
+            continue
+        if path.name in exclude_folders:
+            continue
+        if find_media_files(path, supported_extensions, exclude_folders):
+            folders.append(path)
+    folders.sort(key=lambda item: item.name.lower())
+    return folders
+
+
+def find_media_files_in_folders(
+    folders: list[Path],
+    supported_extensions: set[str],
+    exclude_folders: set[str] | None = None,
+) -> list[Path]:
+    files: list[Path] = []
+    for folder in folders:
+        files.extend(find_media_files(folder, supported_extensions, exclude_folders))
+    files.sort(key=lambda item: str(item).lower())
+    return files
+
+
 def ensure_entries(prefs: dict[str, Any], files: list[Path]) -> dict[str, Any]:
     prefs.setdefault("files", {})
     for file_path in files:

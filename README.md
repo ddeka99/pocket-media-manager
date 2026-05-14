@@ -2,10 +2,10 @@
 
 Pocket Media Manager is a personal Windows PC to phone media recommender.
 
-The current v1 helper is intentionally small: it keeps your custom weighted
+The current helper is intentionally small: it keeps your custom weighted
 recommendation logic on the PC, serves the selected local media file over your
-home Wi-Fi, and gives your phone a tiny browser page for launching Infuse and
-recording feedback.
+home Wi-Fi, and gives your phone a tiny browser page for launching and recording
+feedback.
 
 The project does not replace Plex as a full media library. It exists because
 Plex can play files well, but it does not know your custom recommendation
@@ -29,12 +29,15 @@ Open Git Bash in `pc-helper/` and run:
 ./scripts/bootstrap.sh
 ```
 
-Then edit `pc-helper\.env` so `PUBLIC_BASE_URL` uses this PC's LAN IP address,
-for example:
+Then edit `pc-helper\.env` so `PUBLIC_BASE_URL` uses this PC's LAN IP address
+and `PLAYER` names the phone player to open:
 
 ```text
 PUBLIC_BASE_URL=http://192.168.1.50:8787
+PLAYER=infuse
 ```
+
+Use `PLAYER=vlc` to test VLC instead.
 
 Run the helper:
 
@@ -55,7 +58,9 @@ Test from your phone on the same Wi-Fi:
 http://<PC_LAN_IP>:8787/
 ```
 
-Tap `Recommend` to open Infuse. When you switch back to the browser, choose
-Like, Dislike, Pending, or Skip.
+Tap `Recommend` to open the configured player. Use `Recommend with Selections`
+when you want to choose one or more top-level folders under `MEDIA_ROOT` for a
+single recommendation. When you switch back to the browser, choose Like,
+Dislike, Pending, or Skip.
 
 See `pc-helper/README.md` for the full setup and phone workflow.

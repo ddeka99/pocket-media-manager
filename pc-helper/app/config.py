@@ -9,6 +9,7 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MEDIA_ROOT = Path(r"E:\Hobby Disk")
 DEFAULT_PREFS_FILE = APP_ROOT / "_mpv_prefs.json"
 DEFAULT_SUPPORTED_EXTENSIONS = {".mp4", ".mkv", ".mov", ".avi", ".webm"}
+SUPPORTED_PLAYERS = {"infuse", "vlc"}
 
 
 def _load_dotenv() -> None:
@@ -58,12 +59,16 @@ class Settings:
     server_host: str
     server_port: int
     public_base_url: str
+    player: str
 
 
 def get_settings() -> Settings:
     _load_dotenv()
     server_port = int(os.getenv("SERVER_PORT", "8787"))
     public_base_url = os.getenv("PUBLIC_BASE_URL", f"http://127.0.0.1:{server_port}").rstrip("/")
+    player = os.getenv("PLAYER", "infuse").strip().lower()
+    if player not in SUPPORTED_PLAYERS:
+        player = "infuse"
     return Settings(
         media_root=_path_from_env("MEDIA_ROOT", DEFAULT_MEDIA_ROOT),
         prefs_file=_path_from_env("PREFS_FILE", DEFAULT_PREFS_FILE),
@@ -72,4 +77,5 @@ def get_settings() -> Settings:
         server_host=os.getenv("SERVER_HOST", "0.0.0.0"),
         server_port=server_port,
         public_base_url=public_base_url,
+        player=player,
     )
