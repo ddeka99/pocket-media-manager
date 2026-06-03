@@ -7,6 +7,7 @@ from pathlib import Path
 LAST_RECOMMENDED_PATH: Path | None = None
 STREAM_TOKENS: dict[str, Path] = {}
 AWAITING_FEEDBACK = False
+AWAITING_OTHER_FEEDBACK = False
 SELECTED_FOLDER_NAMES: list[str] = []
 
 
@@ -22,6 +23,15 @@ def set_awaiting_feedback(value: bool) -> None:
 
 def is_awaiting_feedback() -> bool:
     return AWAITING_FEEDBACK
+
+
+def set_awaiting_other_feedback(value: bool) -> None:
+    global AWAITING_OTHER_FEEDBACK
+    AWAITING_OTHER_FEEDBACK = value
+
+
+def is_awaiting_other_feedback() -> bool:
+    return AWAITING_OTHER_FEEDBACK
 
 
 def get_last_recommended() -> Path | None:
@@ -52,8 +62,9 @@ def get_stream_path(token: str) -> Path | None:
 
 
 def clear_state() -> None:
-    global LAST_RECOMMENDED_PATH, AWAITING_FEEDBACK
+    global LAST_RECOMMENDED_PATH, AWAITING_FEEDBACK, AWAITING_OTHER_FEEDBACK
     LAST_RECOMMENDED_PATH = None
     AWAITING_FEEDBACK = False
+    AWAITING_OTHER_FEEDBACK = False
     clear_selected_folder_names()
     STREAM_TOKENS.clear()

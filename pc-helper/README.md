@@ -16,7 +16,7 @@ and streaming bridge, not a custom video player.
 5. The phone opens the configured player while the browser stays on a feedback
    page.
 6. After watching, you switch back to the browser and choose Like, Dislike,
-   Pending, or Skip.
+   Pending, Skip, or Other.
 
 Plex can stay installed for normal library playback, but this workflow does not
 depend on Plex. It exists to preserve your custom recommendation behavior.
@@ -154,6 +154,15 @@ top-level choices in `Recommend with Selections`.
 Tap `Recommend`. The helper selects a video, records the play, opens Infuse or
 VLC depending on `PLAYER`, and leaves the browser on a feedback page.
 
+Tap `Explore` when you want to browse `MEDIA_ROOT` manually. Explore shows
+folders that contain supported media somewhere below them and shows only files
+with extensions from `SUPPORTED_EXTENSIONS`. It also respects
+`EXCLUDE_FOLDERS`. Choosing a file records play metadata, opens the configured
+player, and then uses the same feedback flow as recommendations. The top of
+Explore shows the full `MEDIA_ROOT` path at the root and relative folder names
+inside subfolders. Use the sticky `Home` button to leave Explore; subfolders
+also show a sticky `Back` button.
+
 Tap `Recommend with Selections` when you want to limit one recommendation to
 specific top-level folders under `MEDIA_ROOT`. The selection page shows the
 configured media root at the top, then only shows top-level folders that contain
@@ -178,9 +187,39 @@ When you switch back to the browser, choose:
 - `Skip`
   Records no preference feedback. The play count and cooldown from the
   recommendation are still already recorded.
+- `Other`
+  Opens a required save step for an optional one-line comment. Saving writes an
+  entry to `other_feedback.jsonl` under `MEDIA_ROOT` without changing
+  like/dislike/pending counts.
 
-After any feedback choice, the browser returns to the home page and `Recommend`
-is available again.
+After feedback is completed, the browser returns to the home page and
+`Recommend` is available again. If the recommendation came from selected
+folders, it returns to the selection page with those folders still checked.
+
+For `Other`, the comment may be empty, but it must be one line and at most 200
+characters including spaces. Each saved entry is appended to:
+
+```text
+MEDIA_ROOT\other_feedback.jsonl
+```
+
+Entries use JSON Lines: one JSON object per line.
+
+```json
+{"path":"E:\\Hobby Disk\\Anime\\Steins Gate.mp4","comment":"Boring, could have been 5 minutes","created_at":"2026-06-03T10:00:00"}
+```
+
+If the comment is empty, `comment` is stored as an empty string:
+
+```json
+{"path":"E:\\Hobby Disk\\Anime\\Steins Gate.mp4","comment":"","created_at":"2026-06-03T10:00:00"}
+```
+
+Use `Feedback Addressed` on the home page after reviewing Other feedback. It
+shows each saved item with a checkbox and displays only the path below
+`MEDIA_ROOT`, such as `Anime\Steins Gate.mp4`. Comments are not shown there.
+Checking items and saving removes those entries from `other_feedback.jsonl`.
+Cancel returns home without changing the file.
 
 The home page also has `Reset Preferences`. It opens a confirmation page before
 clearing `_mpv_prefs.json` back to an empty preference database.
@@ -212,6 +251,8 @@ POST http://<PC_LAN_IP>:8787/feedback/like
 POST http://<PC_LAN_IP>:8787/feedback/dislike
 POST http://<PC_LAN_IP>:8787/feedback/pending
 POST http://<PC_LAN_IP>:8787/feedback/skip
+POST http://<PC_LAN_IP>:8787/feedback/other
+POST http://<PC_LAN_IP>:8787/feedback/other/save
 ```
 
 Feedback applies to the last recommendation made by the running helper process.
@@ -227,6 +268,13 @@ which item was last recommended.
 - `POST /recommend`
   Browser action that selects a recommendation, opens the configured player,
   and shows feedback buttons.
+- `GET /explore`
+  Shows a manual browser rooted at `MEDIA_ROOT`.
+- `GET /explore?path=...`
+  Shows a subfolder under `MEDIA_ROOT`.
+- `POST /explore/play`
+  Plays a selected supported media file from Explore, records play metadata, and
+  shows feedback buttons.
 - `GET /next`
   Picks and records a recommendation, then returns `stream_url`, `infuse_url`,
   configured `player`, `player_url`, and feedback URLs.
@@ -243,6 +291,18 @@ which item was last recommended.
   Adds one pending/save-for-later mark to the last recommended file.
 - `POST /feedback/skip`
   Clears the feedback step without changing preference counts.
+- `POST /feedback/other`
+  Starts the required Other feedback comment step.
+- `GET /feedback/other`
+  Shows the Other feedback comment page.
+- `POST /feedback/other/save`
+  Saves an optional `comment` form field to `MEDIA_ROOT\other_feedback.jsonl` and
+  clears the feedback step without changing preference counts. The comment must
+  be one line and at most 200 characters.
+- `GET /feedback/addressed`
+  Shows saved Other feedback records by relative media path, without comments.
+- `POST /feedback/addressed`
+  Removes the checked Other feedback records and returns to the home page.
 - `GET /reset`
   Shows a confirmation page for resetting preferences.
 - `POST /reset`
@@ -273,6 +333,11 @@ the original PC script:
 If the preference file is missing, the helper creates it. If it is corrupted,
 the helper recovers with an empty in-memory preference set and writes a clean
 file the next time preferences are saved.
+
+`Other` feedback is stored separately in `other_feedback.jsonl` under
+`MEDIA_ROOT`. Each line has `path`, `comment`, and `created_at`. It does not
+affect recommendation weights. The helper appends new records when Other
+feedback is saved and rewrites the file when addressed records are removed.
 
 ## Safety Notes
 
