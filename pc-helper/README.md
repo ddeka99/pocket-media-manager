@@ -41,7 +41,6 @@ PUBLIC_BASE_URL=http://192.168.1.50:8787
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8787
 PLAYER=infuse
-PREFS_FILE=./_mpv_prefs.json
 SUPPORTED_EXTENSIONS=.mp4,.mkv,.mov,.avi,.webm
 EXCLUDE_FOLDERS=
 ```
@@ -53,6 +52,9 @@ needs to reach the PC.
 `infuse` and `vlc`. Infuse is the default because it has already worked cleanly
 in this setup. Set `PLAYER=vlc` to try VLC with the same recommendation and
 feedback flow.
+
+The helper stores recommendation preferences in `MEDIA_ROOT\_mpv_prefs.json`.
+If that file does not exist, it is created the first time preferences are saved.
 
 Find the LAN IP from Windows:
 
@@ -222,7 +224,7 @@ Checking items and saving removes those entries from `other_feedback.jsonl`.
 Cancel returns home without changing the file.
 
 The home page also has `Reset Preferences`. It opens a confirmation page before
-clearing `_mpv_prefs.json` back to an empty preference database.
+clearing `MEDIA_ROOT\_mpv_prefs.json` back to an empty preference database.
 
 ## Optional Phone Shortcuts
 
@@ -312,7 +314,7 @@ which item was last recommended.
 
 ## Recommendation Data
 
-Preferences are stored in `_mpv_prefs.json` by default. The JSON shape matches
+Preferences are stored in `MEDIA_ROOT\_mpv_prefs.json`. The JSON shape matches
 the original PC script:
 
 ```json

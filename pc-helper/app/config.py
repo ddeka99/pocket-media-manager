@@ -7,7 +7,6 @@ from pathlib import Path
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MEDIA_ROOT = Path(r"E:\Hobby Disk")
-DEFAULT_PREFS_FILE = APP_ROOT / "_mpv_prefs.json"
 DEFAULT_SUPPORTED_EXTENSIONS = {".mp4", ".mkv", ".mov", ".avi", ".webm"}
 SUPPORTED_PLAYERS = {"infuse", "vlc"}
 
@@ -69,9 +68,10 @@ def get_settings() -> Settings:
     player = os.getenv("PLAYER", "infuse").strip().lower()
     if player not in SUPPORTED_PLAYERS:
         player = "infuse"
+    media_root = _path_from_env("MEDIA_ROOT", DEFAULT_MEDIA_ROOT)
     return Settings(
-        media_root=_path_from_env("MEDIA_ROOT", DEFAULT_MEDIA_ROOT),
-        prefs_file=_path_from_env("PREFS_FILE", DEFAULT_PREFS_FILE),
+        media_root=media_root,
+        prefs_file=media_root / "_mpv_prefs.json",
         supported_extensions=_parse_extensions(os.getenv("SUPPORTED_EXTENSIONS")),
         exclude_folders=_parse_folder_set(os.getenv("EXCLUDE_FOLDERS")),
         server_host=os.getenv("SERVER_HOST", "0.0.0.0"),

@@ -12,9 +12,9 @@ from app.main import app, build_infuse_url, build_vlc_url
 def configure_env(monkeypatch, tmp_path: Path) -> tuple[Path, Path]:
     media_root = tmp_path / "media"
     media_root.mkdir()
-    prefs_file = tmp_path / "_mpv_prefs.json"
+    prefs_file = media_root / "_mpv_prefs.json"
     monkeypatch.setenv("MEDIA_ROOT", str(media_root))
-    monkeypatch.setenv("PREFS_FILE", str(prefs_file))
+    monkeypatch.delenv("PREFS_FILE", raising=False)
     monkeypatch.setenv("PUBLIC_BASE_URL", "http://192.168.1.50:8787")
     monkeypatch.setenv("SUPPORTED_EXTENSIONS", ".mp4,.mkv")
     monkeypatch.setenv("PLAYER", "infuse")
