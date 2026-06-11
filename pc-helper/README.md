@@ -16,7 +16,7 @@ and streaming bridge, not a custom video player.
 5. The phone opens the configured player while the browser stays on a feedback
    page.
 6. After watching, you switch back to the browser and choose Like, Dislike,
-   Pending, Skip, or Other.
+   Pending, Skip, or Something Else.
 
 Plex can stay installed for normal library playback, but this workflow does not
 depend on Plex. It exists to preserve your custom recommendation behavior.
@@ -162,7 +162,8 @@ with extensions from `SUPPORTED_EXTENSIONS`. Choosing a file records play
 metadata, opens the configured player, and then uses the same feedback flow as
 recommendations. The top of Explore shows the full `MEDIA_ROOT` path at the
 root and relative folder names inside subfolders. Use the sticky `Home` button
-to leave Explore; subfolders also show a sticky `Back` button.
+to leave Explore; subfolders also show a sticky `Back` button. Files with
+unresolved Something Else feedback are hidden from Explore.
 
 Tap `Recommend with Selections` when you want to limit one recommendation to
 specific top-level folders under `MEDIA_ROOT`. The selection page shows the
@@ -176,9 +177,9 @@ given recommendation. The top controls stay visible while you scroll: use
 `Select All` or `Deselect All` to toggle the folder checkboxes in one tap.
 
 After feedback for a selected recommendation, the browser returns to the
-selection page with the same folders still checked. This lets you keep asking
-for recommendations from the same subset. Use `Cancel` on the selection page to
-clear that saved selection and return to the home page.
+selection page with the same eligible folders still checked. This lets you keep
+asking for recommendations from the same subset. Use `Cancel` on the selection
+page to clear that saved selection and return to the home page.
 
 When you switch back to the browser, choose:
 
@@ -191,19 +192,19 @@ When you switch back to the browser, choose:
 - `Skip`
   Records no preference feedback. The play count and cooldown from the
   recommendation are still already recorded.
-- `Other`
-  Opens a required save step for an optional one-line comment. Saving writes an
+- `Something Else`
+  Opens `Describe Change Required`, where you must choose `Remake`, `Fix`,
+  `Trim`, `Hold`, or `Cancel`. Choosing one of the four change types writes an
   entry to `other_feedback.jsonl` under `MEDIA_ROOT` without changing
-  like/dislike/pending counts. If the same file already has an unresolved Other
-  feedback entry, the Other button is withheld until that entry is marked
-  addressed.
+  like/dislike/pending counts. `Cancel` returns to the normal feedback page.
+  If the same file already has unresolved Something Else feedback, the action
+  is withheld until that entry is addressed.
 
 After feedback is completed, the browser returns to the home page and
 `Recommend` is available again. If the recommendation came from selected
 folders, it returns to the selection page with those folders still checked.
 
-For `Other`, the comment may be empty, but it must be one line and at most 200
-characters including spaces. Each saved entry is appended to:
+Something Else entries are appended to:
 
 ```text
 MEDIA_ROOT\other_feedback.jsonl
@@ -212,21 +213,19 @@ MEDIA_ROOT\other_feedback.jsonl
 Entries use JSON Lines: one JSON object per line.
 
 ```json
-{"path":"E:\\Hobby Disk\\Anime\\Steins Gate.mp4","comment":"Boring, could have been 5 minutes","created_at":"2026-06-03T10:00:00"}
+{"path":"E:\\Hobby Disk\\Anime\\Steins Gate\\Steins Gate Opening.mp4","type":"remake","created_at":"2026-06-11T10:00:00"}
 ```
 
-If the comment is empty, `comment` is stored as an empty string:
+Supported `type` values are `remake`, `fix`, `trim`, and `hold`. While an entry
+exists, that file is not eligible for `Recommend`, `Recommend with Selections`,
+or `Explore`.
 
-```json
-{"path":"E:\\Hobby Disk\\Anime\\Steins Gate.mp4","comment":"","created_at":"2026-06-03T10:00:00"}
-```
-
-Use `Feedback Addressed` on the home page after reviewing Other feedback. It
-shows each saved item with a checkbox and displays only the path below
-`MEDIA_ROOT`, such as `Anime\Steins Gate.mp4`. Comments are not shown there.
-Checking items and saving removes those entries from `other_feedback.jsonl`.
-Cancel returns home without changing the file. Once an entry is removed here,
-that file can receive a new Other feedback note again.
+Use `Address Other Feedback` on the home page after reviewing Something Else
+feedback. It groups items by `Remake`, `Fix`, `Trim`, and `Hold`. Each row
+shows the top-level folder as a tag and the media filename, such as
+`[Anime] Steins Gate Opening.mp4`. Checking items and saving removes those
+entries from `other_feedback.jsonl`. Cancel returns home without changing the
+file. Once an entry is removed here, that file becomes eligible again.
 
 The home page also has `Reset Preferences`. It opens a confirmation page before
 clearing `MEDIA_ROOT\_mpv_prefs.json` back to an empty preference database.
@@ -259,6 +258,7 @@ POST http://<PC_LAN_IP>:8787/feedback/dislike
 POST http://<PC_LAN_IP>:8787/feedback/pending
 POST http://<PC_LAN_IP>:8787/feedback/skip
 POST http://<PC_LAN_IP>:8787/feedback/other
+POST http://<PC_LAN_IP>:8787/feedback/other/cancel
 POST http://<PC_LAN_IP>:8787/feedback/other/save
 ```
 
@@ -299,20 +299,23 @@ which item was last recommended.
 - `POST /feedback/skip`
   Clears the feedback step without changing preference counts.
 - `POST /feedback/other`
-  Starts the required Other feedback comment step. Returns a conflict if the
-  current file already has an unresolved Other feedback entry.
+  Starts the required Something Else change-type step. Returns a conflict if
+  the current file already has an unresolved Something Else entry.
 - `GET /feedback/other`
-  Shows the Other feedback comment page, unless the current file already has an
-  unresolved Other feedback entry.
+  Shows the `Describe Change Required` page, unless the current file already
+  has an unresolved Something Else entry.
+- `POST /feedback/other/cancel`
+  Leaves the Something Else step and returns to the normal feedback page.
 - `POST /feedback/other/save`
-  Saves an optional `comment` form field to `MEDIA_ROOT\other_feedback.jsonl` and
-  clears the feedback step without changing preference counts. The comment must
-  be one line and at most 200 characters. Duplicate unresolved Other feedback
-  for the same file is rejected.
+  Saves a required `feedback_type` form field to
+  `MEDIA_ROOT\other_feedback.jsonl` and clears the feedback step without
+  changing preference counts. Valid values are `remake`, `fix`, `trim`, and
+  `hold`. Duplicate unresolved Something Else feedback for the same file is
+  rejected.
 - `GET /feedback/addressed`
-  Shows saved Other feedback records by relative media path, without comments.
+  Shows saved Something Else records grouped by change type.
 - `POST /feedback/addressed`
-  Removes the checked Other feedback records and returns to the home page.
+  Removes the checked Something Else records and returns to the home page.
 - `GET /reset`
   Shows a confirmation page for resetting preferences.
 - `POST /reset`
@@ -344,9 +347,10 @@ If the preference file is missing, the helper creates it. If it is corrupted,
 the helper recovers with an empty in-memory preference set and writes a clean
 file the next time preferences are saved.
 
-`Other` feedback is stored separately in `other_feedback.jsonl` under
-`MEDIA_ROOT`. Each line has `path`, `comment`, and `created_at`. It does not
-affect recommendation weights. The helper appends new records when Other
+Something Else feedback is stored separately in `other_feedback.jsonl` under
+`MEDIA_ROOT`. Each line has `path`, `type`, and `created_at`. It does not affect
+like/dislike/pending counts, but unresolved entries remove those files from
+recommendations and Explore. The helper appends new records when Something Else
 feedback is saved and rewrites the file when addressed records are removed.
 
 ## Safety Notes

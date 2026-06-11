@@ -16,8 +16,14 @@ from . import state
 
 app = FastAPI(title="Pocket Media Recommender Helper", version="0.1.0")
 OTHER_FEEDBACK_FILE_NAME = "other_feedback.jsonl"
-OTHER_FEEDBACK_MAX_COMMENT_LENGTH = 200
 APP_ICON_PATH = Path(__file__).resolve().parents[1] / "pocket-manager-icon.png"
+OTHER_FEEDBACK_TYPES = {
+    "remake": "Remake",
+    "fix": "Fix",
+    "trim": "Trim",
+    "hold": "Hold",
+}
+OTHER_FEEDBACK_TYPE_ORDER = ("remake", "fix", "trim", "hold")
 
 
 def _page(title: str, body: str) -> HTMLResponse:
@@ -86,6 +92,33 @@ def _page(title: str, body: str) -> HTMLResponse:
     .label {{
       color: #181818;
       font-weight: 650;
+    }}
+    .group {{
+      display: grid;
+      gap: .55rem;
+    }}
+    .group h2 {{
+      margin: .6rem 0 0;
+      font-size: 1rem;
+    }}
+    .check {{
+      display: flex;
+      align-items: center;
+      gap: .55rem;
+      line-height: 1.35;
+    }}
+    .tag {{
+      display: inline-block;
+      border: 1px solid #bcbcb5;
+      border-radius: 999px;
+      padding: .08rem .45rem;
+      background: white;
+      color: #555;
+      font-size: .85rem;
+      font-weight: 650;
+    }}
+    .file-name {{
+      color: #181818;
     }}
     button, a.button {{
       width: 100%;
@@ -198,7 +231,7 @@ def _home_page(settings: Settings) -> HTMLResponse:
     <button class="secondary" type="submit">Explore</button>
   </form>
   <form method="get" action="/feedback/addressed">
-    <button class="secondary" type="submit">Feedback Addressed</button>
+    <button class="secondary" type="submit">Address Other Feedback</button>
   </form>
   <form method="get" action="/reset">
     <button class="secondary" type="submit">Reset Preferences</button>
@@ -216,10 +249,7 @@ def _selection_page(
     if feedback_page is not None:
         return feedback_page
 
-    folders = recommender.list_top_level_media_folders(
-        settings.media_root,
-        settings.supported_extensions,
-    )
+    folders = _list_recommendable_top_level_media_folders(settings)
     if not folders:
         return _page(
             "Select Folders",
@@ -275,9 +305,9 @@ def _feedback_page(file_name: str, player_url: str | None = None, other_availabl
     opener = ""
     fallback = ""
     other_control = (
-        '<form method="post" action="/feedback/other"><button class="secondary" type="submit">Other</button></form>'
+        '<form method="post" action="/feedback/other"><button class="secondary" type="submit">Something Else</button></form>'
         if other_available
-        else "<p>Other feedback already exists for this file. Mark it addressed before adding another Other note.</p>"
+        else "<p>Something Else feedback already exists for this file. Address it before adding another change request.</p>"
     )
     if player_url:
         escaped_url = escape(player_url, quote=True)
@@ -309,19 +339,25 @@ def _feedback_page(file_name: str, player_url: str | None = None, other_availabl
     )
 
 
-def _other_feedback_page(file_name: str, error: str | None = None, comment: str = "") -> HTMLResponse:
+def _other_feedback_page(file_name: str) -> HTMLResponse:
     escaped_name = escape(file_name)
-    escaped_comment = escape(comment, quote=True)
-    error_html = f'<p style="color:#9d2020;">{escape(error)}</p>' if error else ""
+    action_buttons = "\n".join(
+        f"""<form method="post" action="/feedback/other/save">
+  <input type="hidden" name="feedback_type" value="{feedback_type}">
+  <button type="submit">{label}</button>
+</form>"""
+        for feedback_type, label in OTHER_FEEDBACK_TYPES.items()
+    )
     return _page(
-        "Other Feedback",
-        f"""<h1>Other Feedback</h1>
+        "Describe Change Required",
+        f"""<h1>Describe Change Required</h1>
 <p>{escaped_name}</p>
-{error_html}
-<form method="post" action="/feedback/other/save" class="stack">
-  <input type="text" name="comment" maxlength="{OTHER_FEEDBACK_MAX_COMMENT_LENGTH}" value="{escaped_comment}" autocomplete="off">
-  <button type="submit">Save</button>
-</form>""",
+<div class="stack">
+  {action_buttons}
+  <form method="post" action="/feedback/other/cancel">
+    <button class="secondary" type="submit">Cancel</button>
+  </form>
+</div>""",
     )
 
 
@@ -357,10 +393,7 @@ def _select_from_files(settings: Settings, files: list[Path]) -> dict[str, str]:
 
 def _select_next(settings: Settings) -> dict[str, str]:
     state.clear_selected_folder_names()
-    files = recommender.find_media_files(
-        settings.media_root,
-        settings.supported_extensions,
-    )
+    files = _find_recommendable_media_files(settings, settings.media_root)
     if not files:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -372,10 +405,7 @@ def _select_next(settings: Settings) -> dict[str, str]:
 def _selected_folder_paths(settings: Settings, folder_names: list[str]) -> list[Path]:
     eligible = {
         folder.name: folder
-        for folder in recommender.list_top_level_media_folders(
-            settings.media_root,
-            settings.supported_extensions,
-        )
+        for folder in _list_recommendable_top_level_media_folders(settings)
     }
     return [eligible[name] for name in folder_names if name in eligible]
 
@@ -404,12 +434,7 @@ def _explore_target(settings: Settings, relative_path: str | None) -> Path:
 
 
 def _folder_has_supported_media(settings: Settings, folder_path: Path) -> bool:
-    return bool(
-        recommender.find_media_files(
-            folder_path,
-            settings.supported_extensions,
-        )
-    )
+    return bool(_find_recommendable_media_files(settings, folder_path))
 
 
 def _explore_page(settings: Settings, relative_path: str | None = None) -> HTMLResponse:
@@ -432,7 +457,11 @@ def _explore_page(settings: Settings, relative_path: str | None = None) -> HTMLR
         if child.is_dir():
             if _folder_has_supported_media(settings, child):
                 folders.append(child)
-        elif child.is_file() and child.suffix.lower() in settings.supported_extensions:
+        elif (
+            child.is_file()
+            and child.suffix.lower() in settings.supported_extensions
+            and not _has_other_feedback_for_file(settings, child)
+        ):
             files.append(child)
 
     folder_links = "\n".join(
@@ -476,6 +505,8 @@ def _select_explored_file(settings: Settings, relative_path: str) -> dict[str, s
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media file missing")
     if selected.suffix.lower() not in settings.supported_extensions:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unsupported media file")
+    if _has_other_feedback_for_file(settings, selected):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media file has unresolved Something Else feedback")
 
     state.clear_selected_folder_names()
     return _select_from_files(settings, [selected])
@@ -485,19 +516,17 @@ def _return_path_after_feedback() -> str:
     return "/select" if state.get_selected_folder_names() else "/"
 
 
-def _validate_other_comment(comment: str) -> str:
-    if "\n" in comment or "\r" in comment:
-        raise ValueError("Comment must be a single line.")
-    if len(comment) > OTHER_FEEDBACK_MAX_COMMENT_LENGTH:
-        raise ValueError("Comment must be 200 characters or fewer.")
-    return comment
+def _normalize_other_feedback_type(raw_value: Any) -> str:
+    if isinstance(raw_value, str) and raw_value.lower() in OTHER_FEEDBACK_TYPES:
+        return raw_value.lower()
+    raise ValueError("Unsupported other feedback type")
 
 
-def _append_other_feedback(settings: Settings, file_path: Path, comment: str) -> None:
+def _append_other_feedback(settings: Settings, file_path: Path, feedback_type: str) -> None:
     output_path = settings.media_root / OTHER_FEEDBACK_FILE_NAME
     record = {
         "path": str(file_path),
-        "comment": comment,
+        "type": feedback_type,
         "created_at": recommender.now_iso(),
     }
     line = f"{json.dumps(record, ensure_ascii=False)}\n"
@@ -524,18 +553,46 @@ def _load_other_feedback_entries(settings: Settings) -> list[dict[str, Any]]:
         file_path = record.get("path")
         if not isinstance(file_path, str) or not file_path:
             continue
+        try:
+            feedback_type = _normalize_other_feedback_type(record.get("type"))
+        except ValueError:
+            continue
         entries.append(
             {
                 "line_number": line_number,
                 "path": file_path,
+                "type": feedback_type,
             }
         )
     return entries
 
 
+def _blocked_other_feedback_paths(settings: Settings) -> set[str]:
+    return {entry["path"] for entry in _load_other_feedback_entries(settings)}
+
+
 def _has_other_feedback_for_file(settings: Settings, file_path: Path) -> bool:
     target = str(file_path)
-    return any(entry["path"] == target for entry in _load_other_feedback_entries(settings))
+    return target in _blocked_other_feedback_paths(settings)
+
+
+def _find_recommendable_media_files(settings: Settings, media_root: Path) -> list[Path]:
+    blocked_paths = _blocked_other_feedback_paths(settings)
+    files = recommender.find_media_files(media_root, settings.supported_extensions)
+    return [file_path for file_path in files if str(file_path) not in blocked_paths]
+
+
+def _list_recommendable_top_level_media_folders(settings: Settings) -> list[Path]:
+    if not settings.media_root.exists() or not settings.media_root.is_dir():
+        return []
+
+    folders = [
+        folder
+        for folder in settings.media_root.iterdir()
+        if folder.is_dir() and _find_recommendable_media_files(settings, folder)
+    ]
+    folders.sort(key=lambda item: item.name.lower())
+    return folders
 
 
 def _feedback_page_for_selection(settings: Settings, selected: dict[str, str]) -> HTMLResponse:
@@ -561,40 +618,55 @@ def _remove_other_feedback_entries(settings: Settings, line_numbers: set[int]) -
     feedback_path.write_text(trailing_text, encoding="utf-8")
 
 
-def _feedback_display_path(settings: Settings, file_path: str) -> str:
+def _feedback_display_parts(settings: Settings, file_path: str) -> tuple[str, str]:
+    path = Path(file_path)
     try:
-        return str(Path(file_path).relative_to(settings.media_root))
+        relative_parts = path.relative_to(settings.media_root).parts
     except ValueError:
-        return file_path
+        relative_parts = path.parts
+    folder_label = relative_parts[0] if len(relative_parts) > 1 else "MEDIA_ROOT"
+    return folder_label, path.name
 
 
 def _feedback_addressed_page(settings: Settings) -> HTMLResponse:
     entries = _load_other_feedback_entries(settings)
     if not entries:
         return _page(
-            "Feedback Addressed",
-            """<h1>Feedback Addressed</h1>
-<p>No other feedback records found.</p>
+            "Address Other Feedback",
+            """<h1>Address Other Feedback</h1>
+<p>No Something Else feedback records found.</p>
 <a class="button secondary" href="/">Cancel</a>""",
         )
 
-    controls = "\n".join(
-        f"""<label class="check">
+    groups = []
+    for feedback_type in OTHER_FEEDBACK_TYPE_ORDER:
+        type_entries = [entry for entry in entries if entry["type"] == feedback_type]
+        if not type_entries:
+            continue
+        controls = "\n".join(
+            f"""<label class="check">
   <input type="checkbox" name="line_numbers" value="{entry["line_number"]}">
-  <span>{escape(_feedback_display_path(settings, entry["path"]))}</span>
+  <span><span class="tag">{escape(_feedback_display_parts(settings, entry["path"])[0])}</span> <span class="file-name">{escape(_feedback_display_parts(settings, entry["path"])[1])}</span></span>
 </label>"""
-        for entry in entries
-    )
+            for entry in type_entries
+        )
+        groups.append(
+            f"""<section class="group">
+  <h2>{OTHER_FEEDBACK_TYPES[feedback_type]}</h2>
+  {controls}
+</section>"""
+        )
+    grouped_controls = "\n".join(groups)
     return _page(
-        "Feedback Addressed",
-        f"""<h1>Feedback Addressed</h1>
-<form method="post" action="/feedback/addressed" class="stack">
-  <div class="stack">
-    {controls}
-  </div>
-  <button type="submit">Save</button>
-</form>
-<a class="button secondary" href="/">Cancel</a>""",
+        "Address Other Feedback",
+        f"""<h1>Address Other Feedback</h1>
+<div class="toolbar">
+  <button type="submit" form="address-feedback-form">Save</button>
+  <a class="button secondary" href="/">Cancel</a>
+</div>
+<form id="address-feedback-form" method="post" action="/feedback/addressed" class="stack">
+  {grouped_controls}
+</form>""",
     )
 
 
@@ -700,10 +772,15 @@ def recommend_from_selected_folders(folders: list[str] = Form(default=[])) -> HT
     if not selected_folders:
         return _selection_page(settings, "Select at least one available folder.", folders)
 
-    files = recommender.find_media_files_in_folders(
-        selected_folders,
-        settings.supported_extensions,
-    )
+    blocked_paths = _blocked_other_feedback_paths(settings)
+    files = [
+        file_path
+        for file_path in recommender.find_media_files_in_folders(
+            selected_folders,
+            settings.supported_extensions,
+        )
+        if str(file_path) not in blocked_paths
+    ]
     if not files:
         return _selection_page(
             settings,
@@ -803,12 +880,26 @@ def feedback_other(request: Request) -> dict[str, Any] | RedirectResponse | HTML
     if _has_other_feedback_for_file(settings, last_recommended):
         if _wants_html(request):
             return _feedback_page(last_recommended.name, other_available=False)
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Other feedback already exists for this file")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Something Else feedback already exists for this file")
 
     state.set_awaiting_other_feedback(True)
     if _wants_html(request):
         return RedirectResponse("/feedback/other", status_code=status.HTTP_303_SEE_OTHER)
     return {"ok": True, "feedback": "other", "file_name": last_recommended.name}
+
+
+@app.post("/feedback/other/cancel", response_model=None)
+def cancel_other_feedback(request: Request) -> dict[str, Any] | RedirectResponse:
+    last_recommended = state.get_last_recommended()
+    if last_recommended is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No recommendation has been made yet")
+    if not state.is_awaiting_feedback() or not state.is_awaiting_other_feedback():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No Something Else feedback is currently pending")
+
+    state.set_awaiting_other_feedback(False)
+    if _wants_html(request):
+        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+    return {"ok": True, "feedback": "other_cancelled", "file_name": last_recommended.name}
 
 
 @app.get("/feedback/other", response_class=HTMLResponse)
@@ -824,33 +915,39 @@ def other_feedback_form() -> HTMLResponse:
 
 
 @app.post("/feedback/other/save", response_model=None)
-def save_other_feedback(request: Request, comment: str = Form(default="")) -> dict[str, Any] | RedirectResponse | HTMLResponse:
+def save_other_feedback(
+    request: Request,
+    feedback_type: str = Form(...),
+) -> dict[str, Any] | RedirectResponse | HTMLResponse:
     settings = _settings()
     last_recommended = state.get_last_recommended()
     if last_recommended is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No recommendation has been made yet")
     if not state.is_awaiting_feedback() or not state.is_awaiting_other_feedback():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No other feedback is currently pending")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No Something Else feedback is currently pending")
     if _has_other_feedback_for_file(settings, last_recommended):
         state.set_awaiting_other_feedback(False)
         if _wants_html(request):
             return _feedback_page(last_recommended.name, other_available=False)
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Other feedback already exists for this file")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Something Else feedback already exists for this file")
 
     try:
-        validated_comment = _validate_other_comment(comment)
+        normalized_feedback_type = _normalize_other_feedback_type(feedback_type)
     except ValueError as error:
-        if _wants_html(request):
-            return _other_feedback_page(last_recommended.name, str(error), comment)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
 
-    _append_other_feedback(settings, last_recommended, validated_comment)
+    _append_other_feedback(settings, last_recommended, normalized_feedback_type)
     state.set_awaiting_other_feedback(False)
     state.set_awaiting_feedback(False)
 
     if _wants_html(request):
         return RedirectResponse(_return_path_after_feedback(), status_code=status.HTTP_303_SEE_OTHER)
-    return {"ok": True, "feedback": "other", "file_name": last_recommended.name}
+    return {
+        "ok": True,
+        "feedback": "other",
+        "other_feedback_type": normalized_feedback_type,
+        "file_name": last_recommended.name,
+    }
 
 
 @app.get("/reset", response_class=HTMLResponse)

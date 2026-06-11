@@ -94,7 +94,7 @@ def test_home_shows_recommend_and_reset(monkeypatch, tmp_path):
     assert "Recommend" in response.text
     assert "Recommend with Selections" in response.text
     assert "Explore" in response.text
-    assert "Feedback Addressed" in response.text
+    assert "Address Other Feedback" in response.text
     assert "Reset Preferences" in response.text
     assert "Excluded folders" not in response.text
 
@@ -113,22 +113,24 @@ def test_browser_recommend_returns_feedback_page_with_infuse_opener(monkeypatch,
     assert "/feedback/like" in response.text
     assert "/feedback/skip" in response.text
     assert "/feedback/other" in response.text
+    assert "Something Else" in response.text
 
 
 def test_other_feedback_is_hidden_when_record_already_exists(monkeypatch, tmp_path):
     media_root, _ = configure_env(monkeypatch, tmp_path)
     media_file = media_root / "video.mp4"
     media_file.write_bytes(b"fake media")
+    client = TestClient(app)
+    client.post("/recommend", headers={"accept": "text/html"})
     (media_root / "other_feedback.jsonl").write_text(
-        json.dumps({"path": str(media_file), "comment": "already logged", "created_at": "2026-06-04T10:00:00"}) + "\n",
+        json.dumps({"path": str(media_file), "type": "fix", "created_at": "2026-06-04T10:00:00"}) + "\n",
         encoding="utf-8",
     )
-    client = TestClient(app)
 
-    response = client.post("/recommend", headers={"accept": "text/html"})
+    response = client.get("/")
 
     assert response.status_code == 200
-    assert "Other feedback already exists for this file." in response.text
+    assert "Something Else feedback already exists for this file." in response.text
     assert "/feedback/other" not in response.text
 
 
@@ -136,17 +138,17 @@ def test_duplicate_other_feedback_post_is_rejected(monkeypatch, tmp_path):
     media_root, _ = configure_env(monkeypatch, tmp_path)
     media_file = media_root / "video.mp4"
     media_file.write_bytes(b"fake media")
-    (media_root / "other_feedback.jsonl").write_text(
-        json.dumps({"path": str(media_file), "comment": "already logged", "created_at": "2026-06-04T10:00:00"}) + "\n",
-        encoding="utf-8",
-    )
     client = TestClient(app)
     client.post("/recommend", headers={"accept": "text/html"})
+    (media_root / "other_feedback.jsonl").write_text(
+        json.dumps({"path": str(media_file), "type": "fix", "created_at": "2026-06-04T10:00:00"}) + "\n",
+        encoding="utf-8",
+    )
 
     response = client.post("/feedback/other")
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "Other feedback already exists for this file"
+    assert response.json()["detail"] == "Something Else feedback already exists for this file"
 
 
 def test_next_last_and_feedback_update_prefs(monkeypatch, tmp_path):
@@ -221,6 +223,59 @@ def test_explore_lists_supported_files_and_media_folders(monkeypatch, tmp_path):
     assert "Movies" in response.text
     assert "notes.txt" not in response.text
     assert "Empty" not in response.text
+
+
+def test_unresolved_something_else_blocks_recommendations_and_explore(monkeypatch, tmp_path):
+    media_root, _ = configure_env(monkeypatch, tmp_path)
+    blocked_folder = media_root / "Anime"
+    available_folder = media_root / "Movies"
+    blocked_folder.mkdir()
+    available_folder.mkdir()
+    blocked_file = blocked_folder / "blocked.mp4"
+    available_file = available_folder / "available.mp4"
+    blocked_file.write_bytes(b"fake blocked")
+    available_file.write_bytes(b"fake available")
+    (media_root / "other_feedback.jsonl").write_text(
+        json.dumps({"path": str(blocked_file), "type": "remake", "created_at": "2026-06-11T10:00:00"}) + "\n",
+        encoding="utf-8",
+    )
+    client = TestClient(app)
+
+    explore_response = client.get("/explore")
+    recommend_response = client.post("/recommend", headers={"accept": "text/html"})
+
+    assert recommend_response.status_code == 200
+    assert "available.mp4" in recommend_response.text
+    assert "blocked.mp4" not in recommend_response.text
+    assert explore_response.status_code == 200
+    assert "Movies" in explore_response.text
+    assert "Anime" not in explore_response.text
+    assert "blocked.mp4" not in explore_response.text
+
+
+def test_selected_recommend_ignores_files_with_unresolved_something_else(monkeypatch, tmp_path):
+    media_root, _ = configure_env(monkeypatch, tmp_path)
+    anime = media_root / "Anime"
+    anime.mkdir()
+    blocked_file = anime / "blocked.mp4"
+    available_file = anime / "available.mp4"
+    blocked_file.write_bytes(b"fake blocked")
+    available_file.write_bytes(b"fake available")
+    (media_root / "other_feedback.jsonl").write_text(
+        json.dumps({"path": str(blocked_file), "type": "fix", "created_at": "2026-06-11T10:00:00"}) + "\n",
+        encoding="utf-8",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/recommend/selected",
+        data={"folders": "Anime"},
+        headers={"accept": "text/html"},
+    )
+
+    assert response.status_code == 200
+    assert "available.mp4" in response.text
+    assert "blocked.mp4" not in response.text
 
 
 def test_explore_can_navigate_into_folder_and_back(monkeypatch, tmp_path):
@@ -337,7 +392,7 @@ def test_skip_feedback_does_not_change_preference_counts(monkeypatch, tmp_path):
     assert '"last_feedback": null' in prefs_text
 
 
-def test_other_feedback_requires_save_and_appends_comment_file(monkeypatch, tmp_path):
+def test_something_else_requires_type_and_appends_feedback_file(monkeypatch, tmp_path):
     media_root, prefs_file = configure_env(monkeypatch, tmp_path)
     media_file = media_root / "video.mp4"
     media_file.write_bytes(b"fake media")
@@ -351,12 +406,17 @@ def test_other_feedback_requires_save_and_appends_comment_file(monkeypatch, tmp_
 
     home_response = client.get("/")
     assert home_response.status_code == 200
-    assert "Other Feedback" in home_response.text
+    assert "Describe Change Required" in home_response.text
     assert "video.mp4" in home_response.text
+    assert "Remake" in home_response.text
+    assert "Fix" in home_response.text
+    assert "Trim" in home_response.text
+    assert "Hold" in home_response.text
+    assert "/feedback/other/cancel" in home_response.text
 
     save_response = client.post(
         "/feedback/other/save",
-        data={"comment": "Boring, could have been 5 minutes"},
+        data={"feedback_type": "trim"},
         headers={"accept": "text/html"},
     )
 
@@ -369,7 +429,7 @@ def test_other_feedback_requires_save_and_appends_comment_file(monkeypatch, tmp_
     assert records == [
         {
             "path": str(media_file),
-            "comment": "Boring, could have been 5 minutes",
+            "type": "trim",
             "created_at": records[0]["created_at"],
         }
     ]
@@ -382,44 +442,37 @@ def test_other_feedback_requires_save_and_appends_comment_file(monkeypatch, tmp_
     assert '"last_feedback": null' in prefs_text
 
 
-def test_other_feedback_allows_empty_comment(monkeypatch, tmp_path):
+def test_something_else_cancel_returns_to_feedback_page(monkeypatch, tmp_path):
     media_root, _ = configure_env(monkeypatch, tmp_path)
-    media_file = media_root / "video.mp4"
-    media_file.write_bytes(b"fake media")
+    (media_root / "video.mp4").write_bytes(b"fake media")
     client = TestClient(app, follow_redirects=False)
     client.post("/recommend", headers={"accept": "text/html"})
     client.post("/feedback/other", headers={"accept": "text/html"})
 
     response = client.post(
-        "/feedback/other/save",
-        data={"comment": ""},
+        "/feedback/other/cancel",
         headers={"accept": "text/html"},
     )
 
     assert response.status_code == 303
-    records = [
-        json.loads(line)
-        for line in (media_root / "other_feedback.jsonl").read_text(encoding="utf-8").splitlines()
-    ]
-    assert records[0]["path"] == str(media_file)
-    assert records[0]["comment"] == ""
-    assert records[0]["created_at"]
+    assert response.headers["location"] == "/"
+    feedback_response = client.get("/")
+    assert "Feedback" in feedback_response.text
+    assert "Something Else" in feedback_response.text
+    assert not (media_root / "other_feedback.jsonl").exists()
 
 
-def test_other_feedback_rejects_long_or_multiline_comment(monkeypatch, tmp_path):
+def test_something_else_rejects_invalid_type(monkeypatch, tmp_path):
     media_root, _ = configure_env(monkeypatch, tmp_path)
     (media_root / "video.mp4").write_bytes(b"fake media")
     client = TestClient(app)
     client.post("/recommend", headers={"accept": "text/html"})
     client.post("/feedback/other", headers={"accept": "text/html"})
 
-    long_response = client.post("/feedback/other/save", data={"comment": "x" * 201})
-    newline_response = client.post("/feedback/other/save", data={"comment": "line one\nline two"})
+    response = client.post("/feedback/other/save", data={"feedback_type": "unknown"})
 
-    assert long_response.status_code == 400
-    assert long_response.json()["detail"] == "Comment must be 200 characters or fewer."
-    assert newline_response.status_code == 400
-    assert newline_response.json()["detail"] == "Comment must be a single line."
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Unsupported other feedback type"
     assert not (media_root / "other_feedback.jsonl").exists()
 
 
@@ -431,19 +484,19 @@ def test_stale_other_feedback_save_does_not_append_duplicate(monkeypatch, tmp_pa
     client.post("/recommend", headers={"accept": "text/html"})
     client.post("/feedback/other", headers={"accept": "text/html"})
     original_record = json.dumps(
-        {"path": str(media_file), "comment": "already logged", "created_at": "2026-06-04T10:00:00"}
+        {"path": str(media_file), "type": "fix", "created_at": "2026-06-04T10:00:00"}
     )
     feedback_file = media_root / "other_feedback.jsonl"
     feedback_file.write_text(original_record + "\n", encoding="utf-8")
 
-    response = client.post("/feedback/other/save", data={"comment": "second note"})
+    response = client.post("/feedback/other/save", data={"feedback_type": "remake"})
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "Other feedback already exists for this file"
+    assert response.json()["detail"] == "Something Else feedback already exists for this file"
     assert feedback_file.read_text(encoding="utf-8") == original_record + "\n"
 
 
-def test_selected_other_feedback_returns_to_selection_after_save(monkeypatch, tmp_path):
+def test_selected_something_else_returns_to_selection_after_save(monkeypatch, tmp_path):
     media_root, _ = configure_env(monkeypatch, tmp_path)
     anime = media_root / "Anime"
     movies = media_root / "Movies"
@@ -462,7 +515,7 @@ def test_selected_other_feedback_returns_to_selection_after_save(monkeypatch, tm
 
     response = client.post(
         "/feedback/other/save",
-        data={"comment": "wrong category"},
+        data={"feedback_type": "hold"},
         headers={"accept": "text/html"},
     )
 
@@ -473,22 +526,22 @@ def test_selected_other_feedback_returns_to_selection_after_save(monkeypatch, tm
         for line in (media_root / "other_feedback.jsonl").read_text(encoding="utf-8").splitlines()
     ]
     assert records[0]["path"] == str(media_file)
-    assert records[0]["comment"] == "wrong category"
+    assert records[0]["type"] == "hold"
     selection_response = client.get("/select")
-    assert 'value="Anime" checked' in selection_response.text
+    assert 'value="Anime" checked' not in selection_response.text
     assert 'value="Movies" checked' not in selection_response.text
 
 
 def test_feedback_addressed_lists_paths_without_comments(monkeypatch, tmp_path):
     media_root, _ = configure_env(monkeypatch, tmp_path)
-    first = media_root / "Anime" / "Steins Gate.mp4"
+    first = media_root / "Anime" / "Steins Gate" / "Steins Gate Opening.mp4"
     second = media_root / "Anime" / "Attack On Titan" / "S1" / "e1.mp4"
     feedback_file = media_root / "other_feedback.jsonl"
     feedback_file.write_text(
         "\n".join(
             [
-                json.dumps({"path": str(first), "comment": "boring", "created_at": "2026-06-03T10:00:00"}),
-                json.dumps({"path": str(second), "comment": "", "created_at": "2026-06-03T10:01:00"}),
+                json.dumps({"path": str(first), "type": "remake", "created_at": "2026-06-03T10:00:00"}),
+                json.dumps({"path": str(second), "type": "trim", "created_at": "2026-06-03T10:01:00"}),
             ]
         )
         + "\n",
@@ -499,12 +552,15 @@ def test_feedback_addressed_lists_paths_without_comments(monkeypatch, tmp_path):
     response = client.get("/feedback/addressed")
 
     assert response.status_code == 200
-    assert "Feedback Addressed" in response.text
-    assert str(first.relative_to(media_root)) in response.text
-    assert str(second.relative_to(media_root)) in response.text
+    assert "Address Other Feedback" in response.text
+    assert "Remake" in response.text
+    assert "Trim" in response.text
+    assert '<span class="tag">Anime</span> <span class="file-name">Steins Gate Opening.mp4</span>' in response.text
+    assert '<span class="tag">Anime</span> <span class="file-name">e1.mp4</span>' in response.text
+    assert str(first.relative_to(media_root)) not in response.text
+    assert str(second.relative_to(media_root)) not in response.text
     assert str(first) not in response.text
     assert str(second) not in response.text
-    assert "boring" not in response.text
     assert 'name="line_numbers" value="0"' in response.text
     assert 'name="line_numbers" value="1"' in response.text
 
@@ -518,9 +574,9 @@ def test_feedback_addressed_save_removes_checked_records(monkeypatch, tmp_path):
     feedback_file.write_text(
         "\n".join(
             [
-                json.dumps({"path": str(first), "comment": "one", "created_at": "2026-06-03T10:00:00"}),
-                json.dumps({"path": str(second), "comment": "two", "created_at": "2026-06-03T10:01:00"}),
-                json.dumps({"path": str(third), "comment": "three", "created_at": "2026-06-03T10:02:00"}),
+                json.dumps({"path": str(first), "type": "remake", "created_at": "2026-06-03T10:00:00"}),
+                json.dumps({"path": str(second), "type": "fix", "created_at": "2026-06-03T10:01:00"}),
+                json.dumps({"path": str(third), "type": "hold", "created_at": "2026-06-03T10:02:00"}),
             ]
         )
         + "\n",
@@ -539,7 +595,7 @@ def test_feedback_addressed_save_removes_checked_records(monkeypatch, tmp_path):
 def test_feedback_addressed_cancel_does_not_modify_records(monkeypatch, tmp_path):
     media_root, _ = configure_env(monkeypatch, tmp_path)
     media_file = media_root / "Anime" / "Steins Gate.mp4"
-    original_text = json.dumps({"path": str(media_file), "comment": "keep", "created_at": "2026-06-03T10:00:00"}) + "\n"
+    original_text = json.dumps({"path": str(media_file), "type": "fix", "created_at": "2026-06-03T10:00:00"}) + "\n"
     feedback_file = media_root / "other_feedback.jsonl"
     feedback_file.write_text(original_text, encoding="utf-8")
     client = TestClient(app)

@@ -93,12 +93,11 @@ when you want to choose one or more top-level folders under the configured media
 root for a single recommendation. Use `Explore` when you want to browse folders
 and pick a supported media file directly. The selection page shows that media
 root at the top. When you switch back to the browser after a selected
-recommendation, feedback returns you to the selection page with the same folders
-checked. Use `Cancel` on that page to clear the selection and return home. Use
-`Other` when you want to save a one-line note about the recommendation without
-changing its like/dislike/pending score. If a file already has unresolved Other
-feedback, the Other action is withheld until that entry is cleared through
-`Feedback Addressed`. Use `Feedback Addressed` to clear saved Other feedback
-items after reviewing them.
+recommendation, feedback returns you to the selection page with the same
+eligible folders checked. Use `Cancel` on that page to clear the selection and
+return home. Use `Something Else` when the file needs Remake, Fix, Trim, or
+Hold handling without changing its like/dislike/pending score. Files with
+unresolved Something Else feedback are hidden from recommendations and Explore
+until they are cleared through `Address Other Feedback`.
 
 See `pc-helper/README.md` for the full setup and phone workflow.
