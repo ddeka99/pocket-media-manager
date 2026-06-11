@@ -92,14 +92,13 @@ Tap `Recommend` to open the configured player. Use `Recommend with Selections`
 when you want to choose one or more top-level folders under the configured media
 root for a single recommendation. Use `Explore` when you want to browse folders
 and pick a supported media file directly. The selection page shows that media
-root at the top, and the home page shows the folder names configured in
-`EXCLUDE_FOLDERS`, so you can quickly confirm what is being skipped. When you
-switch back to the browser after a selected recommendation, feedback returns you
-to the selection page with the same folders checked. Use `Cancel` on that page
-to clear the selection and return home. Use `Other` when you want to save a
-one-line note about the recommendation without changing its like/dislike/pending
-score. If a file already has unresolved Other feedback, the Other action is
-withheld until that entry is cleared through `Feedback Addressed`. Use
-`Feedback Addressed` to clear saved Other feedback items after reviewing them.
+root at the top. When you switch back to the browser after a selected
+recommendation, feedback returns you to the selection page with the same folders
+checked. Use `Cancel` on that page to clear the selection and return home. Use
+`Other` when you want to save a one-line note about the recommendation without
+changing its like/dislike/pending score. If a file already has unresolved Other
+feedback, the Other action is withheld until that entry is cleared through
+`Feedback Addressed`. Use `Feedback Addressed` to clear saved Other feedback
+items after reviewing them.
 
 See `pc-helper/README.md` for the full setup and phone workflow.

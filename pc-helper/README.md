@@ -42,7 +42,6 @@ SERVER_HOST=0.0.0.0
 SERVER_PORT=8787
 PLAYER=infuse
 SUPPORTED_EXTENSIONS=.mp4,.mkv,.mov,.avi,.webm
-EXCLUDE_FOLDERS=
 ```
 
 `PUBLIC_BASE_URL` must use the PC's LAN IP, not `localhost`, because the phone
@@ -55,6 +54,11 @@ feedback flow.
 
 The helper stores recommendation preferences in `MEDIA_ROOT\_mpv_prefs.json`.
 If that file does not exist, it is created the first time preferences are saved.
+
+The browser/app icon is served from `pc-helper\pocket-manager-icon.png`. The
+current 128x128 PNG is linked as the favicon, Apple touch icon, and web
+manifest icon. A 180x180 version can be substituted later if you want the
+sharpest possible iOS home-screen icon.
 
 Find the LAN IP from Windows:
 
@@ -149,21 +153,16 @@ The main phone workflow is the helper home page:
 http://<PC_LAN_IP>:8787/
 ```
 
-The home page shows the current `EXCLUDE_FOLDERS` setting below the action
-buttons. These names are skipped by normal recommendations and do not appear as
-top-level choices in `Recommend with Selections`.
-
 Tap `Recommend`. The helper selects a video, records the play, opens Infuse or
 VLC depending on `PLAYER`, and leaves the browser on a feedback page.
 
 Tap `Explore` when you want to browse `MEDIA_ROOT` manually. Explore shows
 folders that contain supported media somewhere below them and shows only files
-with extensions from `SUPPORTED_EXTENSIONS`. It also respects
-`EXCLUDE_FOLDERS`. Choosing a file records play metadata, opens the configured
-player, and then uses the same feedback flow as recommendations. The top of
-Explore shows the full `MEDIA_ROOT` path at the root and relative folder names
-inside subfolders. Use the sticky `Home` button to leave Explore; subfolders
-also show a sticky `Back` button.
+with extensions from `SUPPORTED_EXTENSIONS`. Choosing a file records play
+metadata, opens the configured player, and then uses the same feedback flow as
+recommendations. The top of Explore shows the full `MEDIA_ROOT` path at the
+root and relative folder names inside subfolders. Use the sticky `Home` button
+to leave Explore; subfolders also show a sticky `Back` button.
 
 Tap `Recommend with Selections` when you want to limit one recommendation to
 specific top-level folders under `MEDIA_ROOT`. The selection page shows the
@@ -171,7 +170,10 @@ configured media root at the top, then only shows top-level folders that contain
 at least one supported media file. Files are found recursively inside those
 selected folders. For example, selecting `Anime` can still recommend files under
 `Anime\Attack on Titan`, while `Attack on Titan` itself is not shown as a
-checkbox.
+checkbox. This is also the way to avoid folders you do not want included in a
+given recommendation. The top controls stay visible while you scroll: use
+`Recommend` to start from the checked folders, `Cancel` to return home, and
+`Select All` or `Deselect All` to toggle the folder checkboxes in one tap.
 
 After feedback for a selected recommendation, the browser returns to the
 selection page with the same folders still checked. This lets you keep asking

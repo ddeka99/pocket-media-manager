@@ -18,7 +18,6 @@ def configure_env(monkeypatch, tmp_path: Path) -> tuple[Path, Path]:
     monkeypatch.setenv("PUBLIC_BASE_URL", "http://192.168.1.50:8787")
     monkeypatch.setenv("SUPPORTED_EXTENSIONS", ".mp4,.mkv")
     monkeypatch.setenv("PLAYER", "infuse")
-    monkeypatch.setenv("EXCLUDE_FOLDERS", "")
     state.clear_state()
     return media_root, prefs_file
 
@@ -50,6 +49,41 @@ def test_health_returns_ok(monkeypatch, tmp_path):
     assert response.json() == {"ok": True}
 
 
+def test_home_links_app_icon(monkeypatch, tmp_path):
+    configure_env(monkeypatch, tmp_path)
+    client = TestClient(app)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert '<link rel="icon" type="image/png" sizes="128x128" href="/pocket-manager-icon.png">' in response.text
+    assert '<link rel="apple-touch-icon" href="/pocket-manager-icon.png">' in response.text
+    assert '<link rel="manifest" href="/manifest.webmanifest">' in response.text
+
+
+def test_app_icon_and_manifest_are_available(monkeypatch, tmp_path):
+    configure_env(monkeypatch, tmp_path)
+    client = TestClient(app)
+
+    icon_response = client.get("/pocket-manager-icon.png")
+    favicon_response = client.get("/favicon.ico")
+    manifest_response = client.get("/manifest.webmanifest")
+
+    assert icon_response.status_code == 200
+    assert icon_response.headers["content-type"] == "image/png"
+    assert icon_response.content.startswith(b"\x89PNG")
+    assert favicon_response.status_code == 200
+    assert favicon_response.headers["content-type"] == "image/png"
+    assert manifest_response.status_code == 200
+    assert manifest_response.json()["icons"] == [
+        {
+            "src": "/pocket-manager-icon.png",
+            "sizes": "128x128",
+            "type": "image/png",
+        }
+    ]
+
+
 def test_home_shows_recommend_and_reset(monkeypatch, tmp_path):
     configure_env(monkeypatch, tmp_path)
     client = TestClient(app)
@@ -62,21 +96,7 @@ def test_home_shows_recommend_and_reset(monkeypatch, tmp_path):
     assert "Explore" in response.text
     assert "Feedback Addressed" in response.text
     assert "Reset Preferences" in response.text
-    assert "Excluded folders" in response.text
-    assert "No excluded folders configured." in response.text
-
-
-def test_home_lists_configured_excluded_folders(monkeypatch, tmp_path):
-    configure_env(monkeypatch, tmp_path)
-    monkeypatch.setenv("EXCLUDE_FOLDERS", "Trailers,Behind the Scenes")
-    client = TestClient(app)
-
-    response = client.get("/")
-
-    assert response.status_code == 200
-    assert "Excluded folders" in response.text
-    assert "<li>Behind the Scenes</li>" in response.text
-    assert "<li>Trailers</li>" in response.text
+    assert "Excluded folders" not in response.text
 
 
 def test_browser_recommend_returns_feedback_page_with_infuse_opener(monkeypatch, tmp_path):
@@ -179,16 +199,15 @@ def test_explore_lists_supported_files_and_media_folders(monkeypatch, tmp_path):
     media_root, _ = configure_env(monkeypatch, tmp_path)
     anime = media_root / "Anime"
     empty = media_root / "Empty"
-    excluded = media_root / "Excluded"
+    movies = media_root / "Movies"
     nested = anime / "Series"
     nested.mkdir(parents=True)
     empty.mkdir()
-    excluded.mkdir()
+    movies.mkdir()
     (media_root / "loose.mp4").write_bytes(b"fake media")
     (media_root / "notes.txt").write_text("not media", encoding="utf-8")
     (nested / "episode.mkv").write_bytes(b"fake media")
-    (excluded / "hidden.mp4").write_bytes(b"fake media")
-    monkeypatch.setenv("EXCLUDE_FOLDERS", "Excluded")
+    (movies / "hidden.mp4").write_bytes(b"fake media")
     client = TestClient(app)
 
     response = client.get("/explore")
@@ -199,9 +218,9 @@ def test_explore_lists_supported_files_and_media_folders(monkeypatch, tmp_path):
     assert ">Home<" in response.text
     assert "loose.mp4" in response.text
     assert "Anime" in response.text
+    assert "Movies" in response.text
     assert "notes.txt" not in response.text
     assert "Empty" not in response.text
-    assert "Excluded" not in response.text
 
 
 def test_explore_can_navigate_into_folder_and_back(monkeypatch, tmp_path):
@@ -583,6 +602,10 @@ def test_selection_page_lists_only_top_level_folders_with_media(monkeypatch, tmp
 
     assert response.status_code == 200
     assert f"Folders in <em>{media_root}</em>:" in response.text
+    assert '<button type="submit" form="selection-form">Recommend</button>' in response.text
+    assert '<button class="secondary" type="submit" form="selection-cancel-form">Cancel</button>' in response.text
+    assert 'data-select-folders="all">Select All</button>' in response.text
+    assert 'data-select-folders="none">Deselect All</button>' in response.text
     assert "Anime" in response.text
     assert "Attack on Titan" not in response.text
     assert "Empty" not in response.text

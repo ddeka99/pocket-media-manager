@@ -73,9 +73,7 @@ def reset_prefs(prefs_file: Path) -> None:
 def find_media_files(
     media_root: Path,
     supported_extensions: set[str],
-    exclude_folders: set[str] | None = None,
 ) -> list[Path]:
-    exclude_folders = exclude_folders or set()
     if not media_root.exists() or not media_root.is_dir():
         return []
 
@@ -85,8 +83,6 @@ def find_media_files(
             continue
         if path.suffix.lower() not in supported_extensions:
             continue
-        if any(part in exclude_folders for part in path.parts):
-            continue
         files.append(path)
     files.sort(key=lambda item: str(item).lower())
     return files
@@ -95,9 +91,7 @@ def find_media_files(
 def list_top_level_media_folders(
     media_root: Path,
     supported_extensions: set[str],
-    exclude_folders: set[str] | None = None,
 ) -> list[Path]:
-    exclude_folders = exclude_folders or set()
     if not media_root.exists() or not media_root.is_dir():
         return []
 
@@ -105,9 +99,7 @@ def list_top_level_media_folders(
     for path in media_root.iterdir():
         if not path.is_dir():
             continue
-        if path.name in exclude_folders:
-            continue
-        if find_media_files(path, supported_extensions, exclude_folders):
+        if find_media_files(path, supported_extensions):
             folders.append(path)
     folders.sort(key=lambda item: item.name.lower())
     return folders
@@ -116,11 +108,10 @@ def list_top_level_media_folders(
 def find_media_files_in_folders(
     folders: list[Path],
     supported_extensions: set[str],
-    exclude_folders: set[str] | None = None,
 ) -> list[Path]:
     files: list[Path] = []
     for folder in folders:
-        files.extend(find_media_files(folder, supported_extensions, exclude_folders))
+        files.extend(find_media_files(folder, supported_extensions))
     files.sort(key=lambda item: str(item).lower())
     return files
 

@@ -17,6 +17,7 @@ from . import state
 app = FastAPI(title="Pocket Media Recommender Helper", version="0.1.0")
 OTHER_FEEDBACK_FILE_NAME = "other_feedback.jsonl"
 OTHER_FEEDBACK_MAX_COMMENT_LENGTH = 200
+APP_ICON_PATH = Path(__file__).resolve().parents[1] / "pocket-manager-icon.png"
 
 
 def _page(title: str, body: str) -> HTMLResponse:
@@ -27,6 +28,12 @@ def _page(title: str, body: str) -> HTMLResponse:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{escape(title)}</title>
+  <link rel="icon" type="image/png" sizes="128x128" href="/pocket-manager-icon.png">
+  <link rel="apple-touch-icon" href="/pocket-manager-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="application-name" content="Pocket Media Manager">
+  <meta name="apple-mobile-web-app-title" content="Pocket Media Manager">
+  <meta name="theme-color" content="#f7f7f4">
   <style>
     body {{
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -172,21 +179,11 @@ def _current_feedback_page() -> HTMLResponse | None:
     )
 
 
-def _excluded_folders_html(settings: Settings) -> str:
-    folders = sorted(settings.exclude_folders, key=str.lower)
-    if not folders:
-        return '<p>No excluded folders configured.</p>'
-
-    items = "\n".join(f"<li>{escape(folder)}</li>" for folder in folders)
-    return f"<ul>{items}</ul>"
-
-
 def _home_page(settings: Settings) -> HTMLResponse:
     feedback_page = _current_feedback_page()
     if feedback_page is not None:
         return feedback_page
 
-    excluded_folders = _excluded_folders_html(settings)
     return _page(
         "Pocket Media Manager",
         f"""<h1>Pocket Media Manager</h1>
@@ -206,11 +203,7 @@ def _home_page(settings: Settings) -> HTMLResponse:
   <form method="get" action="/reset">
     <button class="secondary" type="submit">Reset Preferences</button>
   </form>
-</div>
-<section class="status">
-  <p class="label">Excluded folders</p>
-  {excluded_folders}
-</section>""",
+</div>""",
     )
 
 
@@ -226,7 +219,6 @@ def _selection_page(
     folders = recommender.list_top_level_media_folders(
         settings.media_root,
         settings.supported_extensions,
-        settings.exclude_folders,
     )
     if not folders:
         return _page(
@@ -234,7 +226,7 @@ def _selection_page(
             """<h1>Recommend with Selections</h1>
 <p>No top-level folders with supported media were found.</p>
 <form method="post" action="/select/cancel">
-  <button class="secondary" type="submit">Back</button>
+  <button class="secondary" type="submit">Cancel</button>
 </form>""",
         )
 
@@ -252,16 +244,29 @@ def _selection_page(
         "Select Folders",
         f"""<h1>Recommend with Selections</h1>
 {error_html}
-<form method="post" action="/recommend/selected" class="stack">
+<div class="toolbar">
+  <button type="submit" form="selection-form">Recommend</button>
+  <button class="secondary" type="submit" form="selection-cancel-form">Cancel</button>
+  <button class="secondary" type="button" data-select-folders="all">Select All</button>
+  <button class="secondary" type="button" data-select-folders="none">Deselect All</button>
+</div>
+<form id="selection-form" method="post" action="/recommend/selected" class="stack">
   <p>Folders in <em>{media_root_label}</em>:</p>
   <div class="stack">
     {folder_controls}
   </div>
-  <button type="submit">Recommend</button>
 </form>
-<form method="post" action="/select/cancel">
-  <button class="secondary" type="submit">Cancel</button>
-</form>""",
+<form id="selection-cancel-form" method="post" action="/select/cancel"></form>
+<script>
+  document.querySelectorAll("[data-select-folders]").forEach(function (button) {{
+    button.addEventListener("click", function () {{
+      var checked = button.dataset.selectFolders === "all";
+      document.querySelectorAll('input[name="folders"]').forEach(function (checkbox) {{
+        checkbox.checked = checked;
+      }});
+    }});
+  }});
+</script>""",
     )
 
 
@@ -355,7 +360,6 @@ def _select_next(settings: Settings) -> dict[str, str]:
     files = recommender.find_media_files(
         settings.media_root,
         settings.supported_extensions,
-        settings.exclude_folders,
     )
     if not files:
         raise HTTPException(
@@ -371,7 +375,6 @@ def _selected_folder_paths(settings: Settings, folder_names: list[str]) -> list[
         for folder in recommender.list_top_level_media_folders(
             settings.media_root,
             settings.supported_extensions,
-            settings.exclude_folders,
         )
     }
     return [eligible[name] for name in folder_names if name in eligible]
@@ -397,8 +400,6 @@ def _explore_target(settings: Settings, relative_path: str | None) -> Path:
     target = (settings.media_root / relative_path).resolve()
     if not _is_under(target, settings.media_root):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Explore path is not allowed")
-    if any(part in settings.exclude_folders for part in target.parts):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Explore path is excluded")
     return target
 
 
@@ -407,7 +408,6 @@ def _folder_has_supported_media(settings: Settings, folder_path: Path) -> bool:
         recommender.find_media_files(
             folder_path,
             settings.supported_extensions,
-            settings.exclude_folders,
         )
     )
 
@@ -430,8 +430,6 @@ def _explore_page(settings: Settings, relative_path: str | None = None) -> HTMLR
     files = []
     for child in sorted(current.iterdir(), key=lambda item: item.name.lower()):
         if child.is_dir():
-            if child.name in settings.exclude_folders:
-                continue
             if _folder_has_supported_media(settings, child):
                 folders.append(child)
         elif child.is_file() and child.suffix.lower() in settings.supported_extensions:
@@ -605,6 +603,39 @@ def health() -> dict[str, bool]:
     return {"ok": True}
 
 
+@app.get("/pocket-manager-icon.png")
+def app_icon() -> FileResponse:
+    if not APP_ICON_PATH.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="App icon missing")
+    return FileResponse(path=APP_ICON_PATH, media_type="image/png")
+
+
+@app.get("/favicon.ico")
+def favicon() -> FileResponse:
+    if not APP_ICON_PATH.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="App icon missing")
+    return FileResponse(path=APP_ICON_PATH, media_type="image/png")
+
+
+@app.get("/manifest.webmanifest")
+def web_manifest() -> dict[str, Any]:
+    return {
+        "name": "Pocket Media Manager",
+        "short_name": "Pocket Media",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#f7f7f4",
+        "theme_color": "#f7f7f4",
+        "icons": [
+            {
+                "src": "/pocket-manager-icon.png",
+                "sizes": "128x128",
+                "type": "image/png",
+            }
+        ],
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 def home() -> HTMLResponse:
     return _home_page(_settings())
@@ -672,7 +703,6 @@ def recommend_from_selected_folders(folders: list[str] = Form(default=[])) -> HT
     files = recommender.find_media_files_in_folders(
         selected_folders,
         settings.supported_extensions,
-        settings.exclude_folders,
     )
     if not files:
         return _selection_page(

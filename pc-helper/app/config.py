@@ -33,12 +33,6 @@ def _parse_extensions(raw_value: str | None) -> set[str]:
     return extensions or set(DEFAULT_SUPPORTED_EXTENSIONS)
 
 
-def _parse_folder_set(raw_value: str | None) -> set[str]:
-    if not raw_value:
-        return set()
-    return {item.strip() for item in raw_value.split(",") if item.strip()}
-
-
 def _path_from_env(name: str, default: Path) -> Path:
     raw_value = os.getenv(name)
     if not raw_value:
@@ -54,7 +48,6 @@ class Settings:
     media_root: Path
     prefs_file: Path
     supported_extensions: set[str]
-    exclude_folders: set[str]
     server_host: str
     server_port: int
     public_base_url: str
@@ -73,7 +66,6 @@ def get_settings() -> Settings:
         media_root=media_root,
         prefs_file=media_root / "_mpv_prefs.json",
         supported_extensions=_parse_extensions(os.getenv("SUPPORTED_EXTENSIONS")),
-        exclude_folders=_parse_folder_set(os.getenv("EXCLUDE_FOLDERS")),
         server_host=os.getenv("SERVER_HOST", "0.0.0.0"),
         server_port=server_port,
         public_base_url=public_base_url,
