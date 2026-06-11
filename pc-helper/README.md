@@ -192,7 +192,9 @@ When you switch back to the browser, choose:
 - `Other`
   Opens a required save step for an optional one-line comment. Saving writes an
   entry to `other_feedback.jsonl` under `MEDIA_ROOT` without changing
-  like/dislike/pending counts.
+  like/dislike/pending counts. If the same file already has an unresolved Other
+  feedback entry, the Other button is withheld until that entry is marked
+  addressed.
 
 After feedback is completed, the browser returns to the home page and
 `Recommend` is available again. If the recommendation came from selected
@@ -221,7 +223,8 @@ Use `Feedback Addressed` on the home page after reviewing Other feedback. It
 shows each saved item with a checkbox and displays only the path below
 `MEDIA_ROOT`, such as `Anime\Steins Gate.mp4`. Comments are not shown there.
 Checking items and saving removes those entries from `other_feedback.jsonl`.
-Cancel returns home without changing the file.
+Cancel returns home without changing the file. Once an entry is removed here,
+that file can receive a new Other feedback note again.
 
 The home page also has `Reset Preferences`. It opens a confirmation page before
 clearing `MEDIA_ROOT\_mpv_prefs.json` back to an empty preference database.
@@ -294,13 +297,16 @@ which item was last recommended.
 - `POST /feedback/skip`
   Clears the feedback step without changing preference counts.
 - `POST /feedback/other`
-  Starts the required Other feedback comment step.
+  Starts the required Other feedback comment step. Returns a conflict if the
+  current file already has an unresolved Other feedback entry.
 - `GET /feedback/other`
-  Shows the Other feedback comment page.
+  Shows the Other feedback comment page, unless the current file already has an
+  unresolved Other feedback entry.
 - `POST /feedback/other/save`
   Saves an optional `comment` form field to `MEDIA_ROOT\other_feedback.jsonl` and
   clears the feedback step without changing preference counts. The comment must
-  be one line and at most 200 characters.
+  be one line and at most 200 characters. Duplicate unresolved Other feedback
+  for the same file is rejected.
 - `GET /feedback/addressed`
   Shows saved Other feedback records by relative media path, without comments.
 - `POST /feedback/addressed`

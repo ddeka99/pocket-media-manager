@@ -95,6 +95,40 @@ def test_browser_recommend_returns_feedback_page_with_infuse_opener(monkeypatch,
     assert "/feedback/other" in response.text
 
 
+def test_other_feedback_is_hidden_when_record_already_exists(monkeypatch, tmp_path):
+    media_root, _ = configure_env(monkeypatch, tmp_path)
+    media_file = media_root / "video.mp4"
+    media_file.write_bytes(b"fake media")
+    (media_root / "other_feedback.jsonl").write_text(
+        json.dumps({"path": str(media_file), "comment": "already logged", "created_at": "2026-06-04T10:00:00"}) + "\n",
+        encoding="utf-8",
+    )
+    client = TestClient(app)
+
+    response = client.post("/recommend", headers={"accept": "text/html"})
+
+    assert response.status_code == 200
+    assert "Other feedback already exists for this file." in response.text
+    assert "/feedback/other" not in response.text
+
+
+def test_duplicate_other_feedback_post_is_rejected(monkeypatch, tmp_path):
+    media_root, _ = configure_env(monkeypatch, tmp_path)
+    media_file = media_root / "video.mp4"
+    media_file.write_bytes(b"fake media")
+    (media_root / "other_feedback.jsonl").write_text(
+        json.dumps({"path": str(media_file), "comment": "already logged", "created_at": "2026-06-04T10:00:00"}) + "\n",
+        encoding="utf-8",
+    )
+    client = TestClient(app)
+    client.post("/recommend", headers={"accept": "text/html"})
+
+    response = client.post("/feedback/other")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Other feedback already exists for this file"
+
+
 def test_next_last_and_feedback_update_prefs(monkeypatch, tmp_path):
     media_root, prefs_file = configure_env(monkeypatch, tmp_path)
     media_file = media_root / "Example Video.mp4"
@@ -368,6 +402,26 @@ def test_other_feedback_rejects_long_or_multiline_comment(monkeypatch, tmp_path)
     assert newline_response.status_code == 400
     assert newline_response.json()["detail"] == "Comment must be a single line."
     assert not (media_root / "other_feedback.jsonl").exists()
+
+
+def test_stale_other_feedback_save_does_not_append_duplicate(monkeypatch, tmp_path):
+    media_root, _ = configure_env(monkeypatch, tmp_path)
+    media_file = media_root / "video.mp4"
+    media_file.write_bytes(b"fake media")
+    client = TestClient(app)
+    client.post("/recommend", headers={"accept": "text/html"})
+    client.post("/feedback/other", headers={"accept": "text/html"})
+    original_record = json.dumps(
+        {"path": str(media_file), "comment": "already logged", "created_at": "2026-06-04T10:00:00"}
+    )
+    feedback_file = media_root / "other_feedback.jsonl"
+    feedback_file.write_text(original_record + "\n", encoding="utf-8")
+
+    response = client.post("/feedback/other/save", data={"comment": "second note"})
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Other feedback already exists for this file"
+    assert feedback_file.read_text(encoding="utf-8") == original_record + "\n"
 
 
 def test_selected_other_feedback_returns_to_selection_after_save(monkeypatch, tmp_path):

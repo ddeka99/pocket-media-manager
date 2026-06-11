@@ -160,9 +160,16 @@ def _current_feedback_page() -> HTMLResponse | None:
     last_recommended = state.get_last_recommended()
     if not state.is_awaiting_feedback() or last_recommended is None:
         return None
+    settings = _settings()
+    if _has_other_feedback_for_file(settings, last_recommended):
+        state.set_awaiting_other_feedback(False)
+        return _feedback_page(last_recommended.name, other_available=False)
     if state.is_awaiting_other_feedback():
         return _other_feedback_page(last_recommended.name)
-    return _feedback_page(last_recommended.name)
+    return _feedback_page(
+        last_recommended.name,
+        other_available=not _has_other_feedback_for_file(settings, last_recommended),
+    )
 
 
 def _excluded_folders_html(settings: Settings) -> str:
@@ -258,10 +265,15 @@ def _selection_page(
     )
 
 
-def _feedback_page(file_name: str, player_url: str | None = None) -> HTMLResponse:
+def _feedback_page(file_name: str, player_url: str | None = None, other_available: bool = True) -> HTMLResponse:
     escaped_name = escape(file_name)
     opener = ""
     fallback = ""
+    other_control = (
+        '<form method="post" action="/feedback/other"><button class="secondary" type="submit">Other</button></form>'
+        if other_available
+        else "<p>Other feedback already exists for this file. Mark it addressed before adding another Other note.</p>"
+    )
     if player_url:
         escaped_url = escape(player_url, quote=True)
         script_url = json.dumps(player_url)
@@ -287,7 +299,7 @@ def _feedback_page(file_name: str, player_url: str | None = None) -> HTMLRespons
     <form method="post" action="/feedback/pending"><button type="submit">Pending</button></form>
     <form method="post" action="/feedback/skip"><button class="secondary" type="submit">Skip</button></form>
   </div>
-  <form method="post" action="/feedback/other"><button class="secondary" type="submit">Other</button></form>
+  {other_control}
 </div>""",
     )
 
@@ -523,6 +535,20 @@ def _load_other_feedback_entries(settings: Settings) -> list[dict[str, Any]]:
     return entries
 
 
+def _has_other_feedback_for_file(settings: Settings, file_path: Path) -> bool:
+    target = str(file_path)
+    return any(entry["path"] == target for entry in _load_other_feedback_entries(settings))
+
+
+def _feedback_page_for_selection(settings: Settings, selected: dict[str, str]) -> HTMLResponse:
+    selected_path = Path(selected["path"])
+    return _feedback_page(
+        selected["file_name"],
+        selected["player_url"],
+        other_available=not _has_other_feedback_for_file(settings, selected_path),
+    )
+
+
 def _remove_other_feedback_entries(settings: Settings, line_numbers: set[int]) -> None:
     feedback_path = settings.media_root / OTHER_FEEDBACK_FILE_NAME
     if not feedback_path.exists() or not line_numbers:
@@ -604,7 +630,7 @@ def save_feedback_addressed(line_numbers: list[int] = Form(default=[])) -> Redir
 def recommend_from_browser() -> HTMLResponse:
     settings = _settings()
     selected = _select_next(settings)
-    return _feedback_page(selected["file_name"], selected["player_url"])
+    return _feedback_page_for_selection(settings, selected)
 
 
 @app.get("/explore", response_class=HTMLResponse)
@@ -616,7 +642,7 @@ def explore(path: str | None = None) -> HTMLResponse:
 def play_explored_file(path: str = Form(...)) -> HTMLResponse:
     settings = _settings()
     selected = _select_explored_file(settings, path)
-    return _feedback_page(selected["file_name"], selected["player_url"])
+    return _feedback_page_for_selection(settings, selected)
 
 
 @app.get("/select", response_class=HTMLResponse)
@@ -657,7 +683,7 @@ def recommend_from_selected_folders(folders: list[str] = Form(default=[])) -> HT
 
     state.set_selected_folder_names([folder.name for folder in selected_folders])
     selected = _select_from_files(settings, files)
-    return _feedback_page(selected["file_name"], selected["player_url"])
+    return _feedback_page_for_selection(settings, selected)
 
 
 @app.get("/next", response_model=None)
@@ -737,12 +763,17 @@ def feedback_skip(request: Request) -> dict[str, Any] | RedirectResponse:
 
 
 @app.post("/feedback/other", response_model=None)
-def feedback_other(request: Request) -> dict[str, Any] | RedirectResponse:
+def feedback_other(request: Request) -> dict[str, Any] | RedirectResponse | HTMLResponse:
+    settings = _settings()
     last_recommended = state.get_last_recommended()
     if last_recommended is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No recommendation has been made yet")
     if not state.is_awaiting_feedback():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No feedback is currently pending")
+    if _has_other_feedback_for_file(settings, last_recommended):
+        if _wants_html(request):
+            return _feedback_page(last_recommended.name, other_available=False)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Other feedback already exists for this file")
 
     state.set_awaiting_other_feedback(True)
     if _wants_html(request):
@@ -752,9 +783,12 @@ def feedback_other(request: Request) -> dict[str, Any] | RedirectResponse:
 
 @app.get("/feedback/other", response_class=HTMLResponse)
 def other_feedback_form() -> HTMLResponse:
+    settings = _settings()
     last_recommended = state.get_last_recommended()
     if last_recommended is None or not state.is_awaiting_feedback():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No recommendation has been made yet")
+    if _has_other_feedback_for_file(settings, last_recommended):
+        return _feedback_page(last_recommended.name, other_available=False)
     state.set_awaiting_other_feedback(True)
     return _other_feedback_page(last_recommended.name)
 
@@ -767,6 +801,11 @@ def save_other_feedback(request: Request, comment: str = Form(default="")) -> di
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No recommendation has been made yet")
     if not state.is_awaiting_feedback() or not state.is_awaiting_other_feedback():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No other feedback is currently pending")
+    if _has_other_feedback_for_file(settings, last_recommended):
+        state.set_awaiting_other_feedback(False)
+        if _wants_html(request):
+            return _feedback_page(last_recommended.name, other_available=False)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Other feedback already exists for this file")
 
     try:
         validated_comment = _validate_other_comment(comment)
