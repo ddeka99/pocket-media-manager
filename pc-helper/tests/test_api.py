@@ -737,6 +737,21 @@ def test_unknown_stream_token_returns_404(monkeypatch, tmp_path):
     assert response.status_code == 404
 
 
+def test_stream_tokens_keep_only_latest_30(monkeypatch, tmp_path):
+    media_root, _ = configure_env(monkeypatch, tmp_path)
+    tokens = []
+    media_files = []
+    for index in range(31):
+        media_file = media_root / f"video-{index}.mp4"
+        media_file.write_bytes(b"fake media")
+        media_files.append(media_file)
+        tokens.append(state.create_stream_token(media_file))
+
+    assert state.get_stream_path(tokens[0]) is None
+    assert state.get_stream_path(tokens[1]) == media_files[1]
+    assert state.get_stream_path(tokens[-1]) == media_files[-1]
+
+
 def test_reset_preferences_clears_prefs_and_state(monkeypatch, tmp_path):
     media_root, prefs_file = configure_env(monkeypatch, tmp_path)
     (media_root / "video.mp4").write_bytes(b"fake media")

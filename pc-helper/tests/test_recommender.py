@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
+import pytest
+
 from app import recommender
 
 
@@ -20,6 +22,22 @@ def test_load_prefs_recovers_from_corrupt_json(tmp_path):
     prefs_file.write_text("{bad json", encoding="utf-8")
 
     assert recommender.load_prefs(prefs_file) == {"files": {}}
+
+
+def test_atomic_write_keeps_original_when_replace_fails(monkeypatch, tmp_path):
+    output_file = tmp_path / "data.json"
+    output_file.write_text("old", encoding="utf-8")
+
+    def fail_replace(_source, _destination):
+        raise RuntimeError("replace failed")
+
+    monkeypatch.setattr(recommender.os, "replace", fail_replace)
+
+    with pytest.raises(RuntimeError, match="replace failed"):
+        recommender.write_text_atomic(output_file, "new")
+
+    assert output_file.read_text(encoding="utf-8") == "old"
+    assert list(tmp_path.glob(".data.json.*.tmp")) == []
 
 
 def test_ensure_entries_preserves_existing_fields(tmp_path):

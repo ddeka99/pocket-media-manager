@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 from html import escape
 import json
+from threading import RLock
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Form, HTTPException, Request, status
@@ -24,6 +25,8 @@ OTHER_FEEDBACK_TYPES = {
     "hold": "Hold",
 }
 OTHER_FEEDBACK_TYPE_ORDER = ("remake", "fix", "trim", "hold")
+PREFS_LOCK = RLock()
+OTHER_FEEDBACK_LOCK = RLock()
 
 
 def _page(title: str, body: str) -> HTMLResponse:
@@ -368,11 +371,12 @@ def _select_from_files(settings: Settings, files: list[Path]) -> dict[str, str]:
             detail="No supported media files found",
         )
 
-    prefs = _load_current_prefs(settings)
-    recommender.ensure_entries(prefs, files)
-    selected = recommender.pick_weighted(files, prefs)
-    recommender.record_play(prefs, selected)
-    recommender.save_prefs(prefs, settings.prefs_file)
+    with PREFS_LOCK:
+        prefs = _load_current_prefs(settings)
+        recommender.ensure_entries(prefs, files)
+        selected = recommender.pick_weighted(files, prefs)
+        recommender.record_play(prefs, selected)
+        recommender.save_prefs(prefs, settings.prefs_file)
 
     state.set_last_recommended(selected)
     state.set_awaiting_feedback(True)
@@ -523,48 +527,49 @@ def _normalize_other_feedback_type(raw_value: Any) -> str:
 
 
 def _append_other_feedback(settings: Settings, file_path: Path, feedback_type: str) -> None:
-    output_path = settings.media_root / OTHER_FEEDBACK_FILE_NAME
-    record = {
-        "path": str(file_path),
-        "type": feedback_type,
-        "created_at": recommender.now_iso(),
-    }
-    line = f"{json.dumps(record, ensure_ascii=False)}\n"
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("a", encoding="utf-8", newline="") as output_file:
-        output_file.write(line)
+    with OTHER_FEEDBACK_LOCK:
+        output_path = settings.media_root / OTHER_FEEDBACK_FILE_NAME
+        record = {
+            "path": str(file_path),
+            "type": feedback_type,
+            "created_at": recommender.now_iso(),
+        }
+        line = f"{json.dumps(record, ensure_ascii=False)}\n"
+        existing_text = output_path.read_text(encoding="utf-8") if output_path.exists() else ""
+        recommender.write_text_atomic(output_path, f"{existing_text}{line}")
 
 
 def _load_other_feedback_entries(settings: Settings) -> list[dict[str, Any]]:
     feedback_path = settings.media_root / OTHER_FEEDBACK_FILE_NAME
-    if not feedback_path.exists():
-        return []
+    with OTHER_FEEDBACK_LOCK:
+        if not feedback_path.exists():
+            return []
 
-    entries: list[dict[str, Any]] = []
-    for line_number, line in enumerate(feedback_path.read_text(encoding="utf-8").splitlines()):
-        if not line.strip():
-            continue
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(record, dict):
-            continue
-        file_path = record.get("path")
-        if not isinstance(file_path, str) or not file_path:
-            continue
-        try:
-            feedback_type = _normalize_other_feedback_type(record.get("type"))
-        except ValueError:
-            continue
-        entries.append(
-            {
-                "line_number": line_number,
-                "path": file_path,
-                "type": feedback_type,
-            }
-        )
-    return entries
+        entries: list[dict[str, Any]] = []
+        for line_number, line in enumerate(feedback_path.read_text(encoding="utf-8").splitlines()):
+            if not line.strip():
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(record, dict):
+                continue
+            file_path = record.get("path")
+            if not isinstance(file_path, str) or not file_path:
+                continue
+            try:
+                feedback_type = _normalize_other_feedback_type(record.get("type"))
+            except ValueError:
+                continue
+            entries.append(
+                {
+                    "line_number": line_number,
+                    "path": file_path,
+                    "type": feedback_type,
+                }
+            )
+        return entries
 
 
 def _blocked_other_feedback_paths(settings: Settings) -> set[str]:
@@ -606,16 +611,17 @@ def _feedback_page_for_selection(settings: Settings, selected: dict[str, str]) -
 
 def _remove_other_feedback_entries(settings: Settings, line_numbers: set[int]) -> None:
     feedback_path = settings.media_root / OTHER_FEEDBACK_FILE_NAME
-    if not feedback_path.exists() or not line_numbers:
-        return
+    with OTHER_FEEDBACK_LOCK:
+        if not feedback_path.exists() or not line_numbers:
+            return
 
-    kept_lines = [
-        line
-        for line_number, line in enumerate(feedback_path.read_text(encoding="utf-8").splitlines())
-        if line_number not in line_numbers
-    ]
-    trailing_text = "".join(f"{line}\n" for line in kept_lines)
-    feedback_path.write_text(trailing_text, encoding="utf-8")
+        kept_lines = [
+            line
+            for line_number, line in enumerate(feedback_path.read_text(encoding="utf-8").splitlines())
+            if line_number not in line_numbers
+        ]
+        trailing_text = "".join(f"{line}\n" for line in kept_lines)
+        recommender.write_text_atomic(feedback_path, trailing_text)
 
 
 def _feedback_display_parts(settings: Settings, file_path: str) -> tuple[str, str]:
@@ -837,10 +843,11 @@ def _feedback_response(feedback: str, request: Request) -> dict[str, Any] | Redi
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Other feedback must be saved first")
 
     if feedback != "skip":
-        prefs = _load_current_prefs(settings)
-        recommender.ensure_entries(prefs, [last_recommended])
-        recommender.apply_feedback(prefs, last_recommended, feedback)
-        recommender.save_prefs(prefs, settings.prefs_file)
+        with PREFS_LOCK:
+            prefs = _load_current_prefs(settings)
+            recommender.ensure_entries(prefs, [last_recommended])
+            recommender.apply_feedback(prefs, last_recommended, feedback)
+            recommender.save_prefs(prefs, settings.prefs_file)
     state.set_awaiting_other_feedback(False)
     state.set_awaiting_feedback(False)
 
@@ -925,18 +932,20 @@ def save_other_feedback(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No recommendation has been made yet")
     if not state.is_awaiting_feedback() or not state.is_awaiting_other_feedback():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No Something Else feedback is currently pending")
-    if _has_other_feedback_for_file(settings, last_recommended):
-        state.set_awaiting_other_feedback(False)
-        if _wants_html(request):
-            return _feedback_page(last_recommended.name, other_available=False)
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Something Else feedback already exists for this file")
 
     try:
         normalized_feedback_type = _normalize_other_feedback_type(feedback_type)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
 
-    _append_other_feedback(settings, last_recommended, normalized_feedback_type)
+    with OTHER_FEEDBACK_LOCK:
+        if _has_other_feedback_for_file(settings, last_recommended):
+            state.set_awaiting_other_feedback(False)
+            if _wants_html(request):
+                return _feedback_page(last_recommended.name, other_available=False)
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Something Else feedback already exists for this file")
+
+        _append_other_feedback(settings, last_recommended, normalized_feedback_type)
     state.set_awaiting_other_feedback(False)
     state.set_awaiting_feedback(False)
 
@@ -968,7 +977,8 @@ def reset_confirm() -> HTMLResponse:
 @app.post("/reset", response_model=None)
 def reset_preferences(request: Request) -> dict[str, bool] | RedirectResponse:
     settings = _settings()
-    recommender.reset_prefs(settings.prefs_file)
+    with PREFS_LOCK:
+        recommender.reset_prefs(settings.prefs_file)
     state.clear_state()
     if _wants_html(request):
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
@@ -982,9 +992,10 @@ def last() -> dict[str, Any]:
     if last_recommended is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No recommendation has been made yet")
 
-    prefs = _load_current_prefs(settings)
-    recommender.ensure_entries(prefs, [last_recommended])
-    meta = prefs["files"][str(last_recommended)]
+    with PREFS_LOCK:
+        prefs = _load_current_prefs(settings)
+        recommender.ensure_entries(prefs, [last_recommended])
+        meta = dict(prefs["files"][str(last_recommended)])
     return {
         "file_name": last_recommended.name,
         "path": str(last_recommended),

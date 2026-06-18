@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import random
+import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -61,9 +63,33 @@ def load_prefs(prefs_file: Path) -> dict[str, Any]:
     return prefs
 
 
+def write_text_atomic(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path: Path | None = None
+    fd, temp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=path.parent,
+        text=True,
+    )
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as temp_file:
+            temp_file.write(text)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
+        os.replace(temp_path, path)
+    except Exception:
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
+
+
 def save_prefs(prefs: dict[str, Any], prefs_file: Path) -> None:
-    prefs_file.parent.mkdir(parents=True, exist_ok=True)
-    prefs_file.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+    write_text_atomic(prefs_file, json.dumps(prefs, indent=2))
 
 
 def reset_prefs(prefs_file: Path) -> None:

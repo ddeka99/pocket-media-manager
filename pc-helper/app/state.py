@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import secrets
 from pathlib import Path
+from threading import RLock
 
 
 LAST_RECOMMENDED_PATH: Path | None = None
+MAX_STREAM_TOKENS = 30
 STREAM_TOKENS: dict[str, Path] = {}
+STREAM_TOKENS_LOCK = RLock()
 AWAITING_FEEDBACK = False
 AWAITING_OTHER_FEEDBACK = False
 SELECTED_FOLDER_NAMES: list[str] = []
@@ -53,12 +56,17 @@ def clear_selected_folder_names() -> None:
 
 def create_stream_token(file_path: Path) -> str:
     token = secrets.token_urlsafe(16)
-    STREAM_TOKENS[token] = file_path
+    with STREAM_TOKENS_LOCK:
+        STREAM_TOKENS[token] = file_path
+        while len(STREAM_TOKENS) > MAX_STREAM_TOKENS:
+            oldest_token = next(iter(STREAM_TOKENS))
+            STREAM_TOKENS.pop(oldest_token, None)
     return token
 
 
 def get_stream_path(token: str) -> Path | None:
-    return STREAM_TOKENS.get(token)
+    with STREAM_TOKENS_LOCK:
+        return STREAM_TOKENS.get(token)
 
 
 def clear_state() -> None:
@@ -67,4 +75,5 @@ def clear_state() -> None:
     AWAITING_FEEDBACK = False
     AWAITING_OTHER_FEEDBACK = False
     clear_selected_folder_names()
-    STREAM_TOKENS.clear()
+    with STREAM_TOKENS_LOCK:
+        STREAM_TOKENS.clear()

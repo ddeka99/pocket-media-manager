@@ -288,8 +288,9 @@ which item was last recommended.
 - `GET /next?redirect=infuse`
   Picks and records a recommendation, then redirects straight to Infuse.
 - `GET /stream/{token}`
-  Streams a token-mapped file. Unknown tokens, missing files, and paths outside
-  `MEDIA_ROOT` return 404.
+  Streams a token-mapped file. The helper keeps the latest 30 playback tokens
+  in memory; older links naturally expire and return 404, the same as unknown
+  tokens, missing files, and paths outside `MEDIA_ROOT`.
 - `POST /feedback/like`
   Adds one like to the last recommended file.
 - `POST /feedback/dislike`
@@ -345,13 +346,18 @@ the original PC script:
 
 If the preference file is missing, the helper creates it. If it is corrupted,
 the helper recovers with an empty in-memory preference set and writes a clean
-file the next time preferences are saved.
+file the next time preferences are saved. Preference updates are protected by a
+process-level lock and written through a temporary file that atomically replaces
+the old file, so a failed write should leave the previous complete JSON file in
+place.
 
 Something Else feedback is stored separately in `other_feedback.jsonl` under
 `MEDIA_ROOT`. Each line has `path`, `type`, and `created_at`. It does not affect
 like/dislike/pending counts, but unresolved entries remove those files from
 recommendations and Explore. The helper appends new records when Something Else
 feedback is saved and rewrites the file when addressed records are removed.
+Those JSONL updates use the same lock plus atomic replace pattern as
+preferences.
 
 ## Safety Notes
 
@@ -361,6 +367,10 @@ public internet.
 The helper does not accept arbitrary file paths from the phone. It only streams
 files selected by the recommendation engine, behind opaque stream tokens, and
 it verifies streamed files are under `MEDIA_ROOT`.
+
+Playback tokens are temporary and in-memory. Only the latest 30 generated links
+are kept, which prevents quick recommendation cycling from leaving an unlimited
+pile of old stream URLs active.
 
 ## Testing
 
