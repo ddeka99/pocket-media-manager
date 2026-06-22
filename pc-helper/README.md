@@ -165,6 +165,11 @@ root and relative folder names inside subfolders. Use the sticky `Home` button
 to leave Explore; subfolders also show a sticky `Back` button. Files with
 unresolved Something Else feedback are hidden from Explore.
 
+Tap `Scoreboard` to see a read-only ranking of recommend-able media files by
+their current numerical recommendation score. It shows only the media filename
+and score, excludes files with unresolved Something Else feedback, and keeps a
+sticky `Back` button at the top while you scroll.
+
 Tap `Recommend with Selections` when you want to limit one recommendation to
 specific top-level folders under `MEDIA_ROOT`. The selection page shows the
 configured media root at the top, then only shows top-level folders that contain
@@ -184,14 +189,16 @@ page to clear that saved selection and return to the home page.
 When you switch back to the browser, choose:
 
 - `Like`
-  Boosts that file in future recommendations.
+  Boosts that file in future recommendations. Use this when you enjoyed the
+  item and are happy for it to come back.
 - `Dislike`
-  Softly penalizes that file without banning it.
+  Strongly penalizes that file without banning it. A dislike carries more
+  weight than a like in the opposite direction.
 - `Pending`
   Marks it as something to revisit and gives it a smaller boost than Like.
 - `Skip`
-  Records no preference feedback. The play count and cooldown from the
-  recommendation are still already recorded.
+  Records no preference feedback. The play count and `last_played` timestamp
+  from the recommendation are still already recorded.
 - `Something Else`
   Opens `Describe Change Required`, where you must choose `Remake`, `Fix`,
   `Trim`, `Hold`, or `Cancel`. Choosing one of the four change types writes an
@@ -226,6 +233,18 @@ shows the top-level folder as a tag and the media filename, such as
 `[Anime] Steins Gate Opening.mp4`. Checking items and saving removes those
 entries from `other_feedback.jsonl`. Cancel returns home without changing the
 file. Once an entry is removed here, that file becomes eligible again.
+
+Recommendation is weighted random rather than a strict queue. Never-played
+files receive the strongest boost so new discovery is prioritized. Likes raise
+future weight, Pending gives a smaller positive nudge, and Dislikes strongly
+lower weight. These weights stay in place until you change the preference data
+or reset preferences; there is no fixed "played in the last 7 days" cooldown.
+When otherwise equal-weight files are in the same recommendation pool,
+`last_played` is used only as a tie-breaker so less recently played files are a
+little more likely than recently played ones. The Scoreboard uses the same
+numerical score for ranking. Ties are ordered from less recently played to more
+recently played; never-played ties are ordered from older date-added to newer
+date-added.
 
 The home page also has `Reset Preferences`. It opens a confirmation page before
 clearing `MEDIA_ROOT\_mpv_prefs.json` back to an empty preference database.

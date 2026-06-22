@@ -94,9 +94,70 @@ def test_home_shows_recommend_and_reset(monkeypatch, tmp_path):
     assert "Recommend" in response.text
     assert "Recommend with Selections" in response.text
     assert "Explore" in response.text
+    assert "Scoreboard" in response.text
     assert "Address Other Feedback" in response.text
     assert "Reset Preferences" in response.text
     assert "Excluded folders" not in response.text
+
+
+def test_scoreboard_lists_recommendable_files_by_score(monkeypatch, tmp_path):
+    media_root, prefs_file = configure_env(monkeypatch, tmp_path)
+    new_file = media_root / "new.mp4"
+    enjoyed_file = media_root / "enjoyed.mp4"
+    old_file = media_root / "old.mp4"
+    recent_file = media_root / "recent.mp4"
+    blocked_file = media_root / "blocked.mp4"
+    for media_file in [new_file, enjoyed_file, old_file, recent_file, blocked_file]:
+        media_file.write_bytes(b"fake media")
+    prefs_file.write_text(
+        json.dumps(
+            {
+                "files": {
+                    str(enjoyed_file): {
+                        "likes": 2,
+                        "dislikes": 0,
+                        "pending": 0,
+                        "play_count": 1,
+                        "last_played": "2026-01-01T00:00:00",
+                        "last_feedback": "y",
+                    },
+                    str(old_file): {
+                        "likes": 0,
+                        "dislikes": 0,
+                        "pending": 0,
+                        "play_count": 1,
+                        "last_played": "2024-01-01T00:00:00",
+                        "last_feedback": None,
+                    },
+                    str(recent_file): {
+                        "likes": 0,
+                        "dislikes": 0,
+                        "pending": 0,
+                        "play_count": 1,
+                        "last_played": "2026-01-01T00:00:00",
+                        "last_feedback": None,
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (media_root / "other_feedback.jsonl").write_text(
+        json.dumps({"path": str(blocked_file), "type": "hold", "created_at": "2026-06-04T10:00:00"}) + "\n",
+        encoding="utf-8",
+    )
+    client = TestClient(app)
+
+    response = client.get("/scoreboard")
+
+    assert response.status_code == 200
+    assert '<a class="button secondary" href="/">Back</a>' in response.text
+    assert "blocked.mp4" not in response.text
+    assert response.text.index("new.mp4") < response.text.index("enjoyed.mp4")
+    assert response.text.index("enjoyed.mp4") < response.text.index("old.mp4")
+    assert response.text.index("old.mp4") < response.text.index("recent.mp4")
+    assert "9.00" in response.text
+    assert "3.50" in response.text
 
 
 def test_browser_recommend_returns_feedback_page_with_infuse_opener(monkeypatch, tmp_path):

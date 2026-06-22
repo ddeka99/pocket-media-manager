@@ -10,7 +10,7 @@ feedback.
 The project does not replace Plex as a full media library. It exists because
 Plex can play files well, but it does not know your custom recommendation
 preferences such as unseen boosts, soft dislike penalties, pending items, and
-recent-play cooldowns.
+Something Else blocks.
 
 ## What Is In This Repo
 
@@ -91,13 +91,14 @@ http://<PC_LAN_IP>:8787/
 Tap `Recommend` to open the configured player. Use `Recommend with Selections`
 when you want to choose one or more top-level folders under the configured media
 root for a single recommendation. Use `Explore` when you want to browse folders
-and pick a supported media file directly. The selection page shows that media
-root at the top. When you switch back to the browser after a selected
-recommendation, feedback returns you to the selection page with the same
-eligible folders checked. Use `Cancel` on that page to clear the selection and
-return home. Use `Something Else` when the file needs Remake, Fix, Trim, or
-Hold handling without changing its like/dislike/pending score. Files with
-unresolved Something Else feedback are hidden from recommendations and Explore
-until they are cleared through `Address Other Feedback`.
+and pick a supported media file directly. Use `Scoreboard` when you want a
+read-only ranking of recommend-able files by their current numerical score. The
+selection page shows the media root at the top. When you switch back to the
+browser after a selected recommendation, feedback returns you to the selection
+page with the same eligible folders checked. Use `Cancel` on that page to clear
+the selection and return home. Use `Something Else` when the file needs Remake,
+Fix, Trim, or Hold handling without changing its like/dislike/pending score.
+Files with unresolved Something Else feedback are hidden from recommendations,
+Explore, and Scoreboard until they are cleared through `Address Other Feedback`.
 
 See `pc-helper/README.md` for the full setup and phone workflow.

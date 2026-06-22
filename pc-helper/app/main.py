@@ -123,6 +123,34 @@ def _page(title: str, body: str) -> HTMLResponse:
     .file-name {{
       color: #181818;
     }}
+    .score-list {{
+      display: grid;
+      gap: .45rem;
+    }}
+    .score-row {{
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: .75rem;
+      border-bottom: 1px solid #d8d8d2;
+      padding: .6rem 0;
+    }}
+    .score-name {{
+      min-width: 0;
+      color: #181818;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }}
+    .score-value {{
+      border: 1px solid #bcbcb5;
+      border-radius: 999px;
+      padding: .15rem .5rem;
+      background: white;
+      color: #181818;
+      font-variant-numeric: tabular-nums;
+      font-weight: 650;
+      white-space: nowrap;
+    }}
     button, a.button {{
       width: 100%;
       box-sizing: border-box;
@@ -233,6 +261,9 @@ def _home_page(settings: Settings) -> HTMLResponse:
   <form method="get" action="/explore">
     <button class="secondary" type="submit">Explore</button>
   </form>
+  <form method="get" action="/scoreboard">
+    <button class="secondary" type="submit">Scoreboard</button>
+  </form>
   <form method="get" action="/feedback/addressed">
     <button class="secondary" type="submit">Address Other Feedback</button>
   </form>
@@ -240,6 +271,39 @@ def _home_page(settings: Settings) -> HTMLResponse:
     <button class="secondary" type="submit">Reset Preferences</button>
   </form>
 </div>""",
+    )
+
+
+def _scoreboard_page(settings: Settings) -> HTMLResponse:
+    feedback_page = _current_feedback_page()
+    if feedback_page is not None:
+        return feedback_page
+
+    files = _find_recommendable_media_files(settings, settings.media_root)
+    if not files:
+        rows = "<p>No recommend-able media files were found.</p>"
+    else:
+        with PREFS_LOCK:
+            prefs = _load_current_prefs(settings)
+            recommender.ensure_entries(prefs, files)
+            ranked_files = recommender.score_media_files(files, prefs)
+            recommender.save_prefs(prefs, settings.prefs_file)
+        rows = "\n".join(
+            f"""<div class="score-row">
+  <span class="score-name">{escape(file_path.name)}</span>
+  <span class="score-value">{score:.2f}</span>
+</div>"""
+            for file_path, score in ranked_files
+        )
+        rows = f'<div class="score-list">{rows}</div>'
+
+    return _page(
+        "Scoreboard",
+        f"""<h1>Scoreboard</h1>
+<div class="toolbar single">
+  <a class="button secondary" href="/">Back</a>
+</div>
+{rows}""",
     )
 
 
@@ -717,6 +781,11 @@ def web_manifest() -> dict[str, Any]:
 @app.get("/", response_class=HTMLResponse)
 def home() -> HTMLResponse:
     return _home_page(_settings())
+
+
+@app.get("/scoreboard", response_class=HTMLResponse)
+def scoreboard() -> HTMLResponse:
+    return _scoreboard_page(_settings())
 
 
 @app.get("/feedback/addressed", response_class=HTMLResponse)

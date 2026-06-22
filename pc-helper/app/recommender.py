@@ -4,18 +4,17 @@ import json
 import os
 import random
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 
-UNSEEN_BONUS = 4.0
-LIKE_BONUS = 1.0
+UNSEEN_BONUS = 8.0
+LIKE_BONUS = 1.25
 PENDING_BONUS = 0.35
-DISLIKE_PENALTY = 0.8
+DISLIKE_PENALTY = 1.75
 MIN_WEIGHT_FLOOR = 0.12
-COOLDOWN_DAYS = 7
-COOLDOWN_MULTIPLIER = 0.25
+RECENCY_TIE_BREAKER_MIN_MULTIPLIER = 0.9
 
 DEFAULT_META = {
     "likes": 0,
@@ -152,18 +151,21 @@ def ensure_entries(prefs: dict[str, Any], files: list[Path]) -> dict[str, Any]:
     return prefs
 
 
-def cooldown_factor(meta: dict[str, Any]) -> float:
+def last_played_sort_value(meta: dict[str, Any]) -> datetime:
     last_played = meta.get("last_played")
     if not last_played:
-        return 1.0
+        return datetime.min
     try:
-        last_dt = datetime.fromisoformat(last_played)
+        return datetime.fromisoformat(last_played)
     except (TypeError, ValueError):
-        return 1.0
+        return datetime.min
 
-    if datetime.now() - last_dt < timedelta(days=COOLDOWN_DAYS):
-        return COOLDOWN_MULTIPLIER
-    return 1.0
+
+def date_added_sort_value(file_path: Path) -> datetime:
+    try:
+        return datetime.fromtimestamp(file_path.stat().st_ctime)
+    except OSError:
+        return datetime.max
 
 
 def compute_weight(meta: dict[str, Any]) -> float:
@@ -180,8 +182,61 @@ def compute_weight(meta: dict[str, Any]) -> float:
     preference = max(preference, MIN_WEIGHT_FLOOR)
 
     weight *= preference
-    weight *= cooldown_factor(meta)
     return max(weight, MIN_WEIGHT_FLOOR)
+
+
+def score_media_files(files: list[Path], prefs: dict[str, Any]) -> list[tuple[Path, float]]:
+    scored = []
+    for file_path in files:
+        meta = prefs["files"].get(str(file_path), {})
+        score = compute_weight(meta)
+        last_played = meta.get("last_played")
+        if last_played:
+            tie_bucket = 1
+            tie_value = last_played_sort_value(meta)
+        else:
+            tie_bucket = 0
+            tie_value = date_added_sort_value(file_path)
+        scored.append((file_path, score, tie_bucket, tie_value))
+
+    scored.sort(key=lambda item: (-item[1], item[2], item[3], str(item[0]).lower()))
+    return [(file_path, score) for file_path, score, _tie_bucket, _tie_value in scored]
+
+
+def apply_recency_tie_breakers(
+    files: list[Path],
+    prefs: dict[str, Any],
+    weights: list[float],
+) -> list[float]:
+    groups: dict[float, list[int]] = {}
+    for index, weight in enumerate(weights):
+        groups.setdefault(weight, []).append(index)
+
+    adjusted = list(weights)
+    for indices in groups.values():
+        if len(indices) <= 1:
+            continue
+
+        recencies = {
+            last_played_sort_value(prefs["files"].get(str(files[index]), {}))
+            for index in indices
+        }
+        if len(recencies) <= 1:
+            continue
+
+        sorted_recencies = sorted(recencies)
+        recency_rank = {
+            recency: rank
+            for rank, recency in enumerate(sorted_recencies)
+        }
+        max_rank = len(sorted_recencies) - 1
+        for index in indices:
+            meta = prefs["files"].get(str(files[index]), {})
+            rank = recency_rank[last_played_sort_value(meta)]
+            multiplier = 1.0 - ((1.0 - RECENCY_TIE_BREAKER_MIN_MULTIPLIER) * (rank / max_rank))
+            adjusted[index] = max(weights[index] * multiplier, MIN_WEIGHT_FLOOR)
+
+    return adjusted
 
 
 def pick_weighted(files: list[Path], prefs: dict[str, Any]) -> Path:
@@ -192,7 +247,8 @@ def pick_weighted(files: list[Path], prefs: dict[str, Any]) -> Path:
     for file_path in files:
         meta = prefs["files"].get(str(file_path), {})
         weights.append(compute_weight(meta))
-    return random.choices(files, weights=weights, k=1)[0]
+    adjusted_weights = apply_recency_tie_breakers(files, prefs, weights)
+    return random.choices(files, weights=adjusted_weights, k=1)[0]
 
 
 def record_play(prefs: dict[str, Any], file_path: Path) -> None:

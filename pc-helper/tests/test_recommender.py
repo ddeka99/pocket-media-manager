@@ -69,11 +69,13 @@ def test_compute_weight_preserves_tuning_behavior():
     disliked = {**base, "dislikes": 100}
     recent = {**base, "last_played": datetime.now().isoformat(timespec="seconds")}
 
+    assert recommender.UNSEEN_BONUS == 8.0
+    assert recommender.DISLIKE_PENALTY > recommender.LIKE_BONUS
     assert recommender.compute_weight(unseen) > recommender.compute_weight(base)
     assert recommender.compute_weight(liked) > recommender.compute_weight(base)
     assert recommender.compute_weight(pending) > recommender.compute_weight(base)
     assert recommender.compute_weight(disliked) == recommender.MIN_WEIGHT_FLOOR
-    assert recommender.compute_weight(recent) < recommender.compute_weight(base)
+    assert recommender.compute_weight(recent) == recommender.compute_weight(base)
 
 
 def test_pick_weighted_returns_available_file(tmp_path):
@@ -83,6 +85,98 @@ def test_pick_weighted_returns_available_file(tmp_path):
     prefs = recommender.ensure_entries({"files": {}}, files)
 
     assert recommender.pick_weighted(files, prefs) in files
+
+
+def test_pick_weighted_uses_recency_only_to_break_equal_weight_ties(monkeypatch, tmp_path):
+    old_file = tmp_path / "old.mp4"
+    recent_file = tmp_path / "recent.mp4"
+    liked_recent_file = tmp_path / "liked-recent.mp4"
+    files = [old_file, recent_file, liked_recent_file]
+    for media_file in files:
+        media_file.write_text("fake", encoding="utf-8")
+    prefs = recommender.ensure_entries({"files": {}}, files)
+    prefs["files"][str(old_file)].update(
+        {
+            "play_count": 1,
+            "last_played": "2024-01-01T00:00:00",
+        }
+    )
+    prefs["files"][str(recent_file)].update(
+        {
+            "play_count": 1,
+            "last_played": "2026-01-01T00:00:00",
+        }
+    )
+    prefs["files"][str(liked_recent_file)].update(
+        {
+            "likes": 1,
+            "play_count": 1,
+            "last_played": "2026-01-01T00:00:00",
+        }
+    )
+    captured: dict[str, list[float]] = {}
+
+    def fake_choices(population, weights, k):
+        captured["weights"] = list(weights)
+        return [population[0]]
+
+    monkeypatch.setattr(recommender.random, "choices", fake_choices)
+
+    recommender.pick_weighted(files, prefs)
+
+    old_weight, recent_weight, liked_recent_weight = captured["weights"]
+    assert old_weight > recent_weight
+    assert liked_recent_weight == recommender.compute_weight(prefs["files"][str(liked_recent_file)])
+
+
+def test_score_media_files_orders_by_score_then_recency_and_date_added(monkeypatch, tmp_path):
+    never_old = tmp_path / "never-old.mp4"
+    never_recent = tmp_path / "never-recent.mp4"
+    liked_recent = tmp_path / "liked-recent.mp4"
+    played_old = tmp_path / "played-old.mp4"
+    played_recent = tmp_path / "played-recent.mp4"
+    files = [played_recent, never_recent, played_old, liked_recent, never_old]
+    for media_file in files:
+        media_file.write_text("fake", encoding="utf-8")
+    prefs = recommender.ensure_entries({"files": {}}, files)
+    prefs["files"][str(liked_recent)].update(
+        {
+            "likes": 1,
+            "play_count": 1,
+            "last_played": "2026-01-01T00:00:00",
+        }
+    )
+    prefs["files"][str(played_old)].update(
+        {
+            "play_count": 1,
+            "last_played": "2024-01-01T00:00:00",
+        }
+    )
+    prefs["files"][str(played_recent)].update(
+        {
+            "play_count": 1,
+            "last_played": "2026-01-01T00:00:00",
+        }
+    )
+    date_added = {
+        never_old: datetime(2024, 1, 1),
+        never_recent: datetime(2026, 1, 1),
+    }
+    monkeypatch.setattr(
+        recommender,
+        "date_added_sort_value",
+        lambda file_path: date_added.get(file_path, datetime.max),
+    )
+
+    ranked_files = [file_path for file_path, _score in recommender.score_media_files(files, prefs)]
+
+    assert ranked_files == [
+        never_old,
+        never_recent,
+        liked_recent,
+        played_old,
+        played_recent,
+    ]
 
 
 def test_list_top_level_media_folders_only_returns_direct_children_with_media(tmp_path):
