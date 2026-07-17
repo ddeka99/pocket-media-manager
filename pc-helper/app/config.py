@@ -8,6 +8,7 @@ from pathlib import Path
 APP_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MEDIA_ROOT = Path(r"E:\Hobby Disk")
 DEFAULT_SUPPORTED_EXTENSIONS = {".mp4", ".mkv", ".mov", ".avi", ".webm"}
+DEFAULT_STREAM_FOLDER = "_stream"
 SUPPORTED_PLAYERS = {"infuse", "vlc"}
 
 
@@ -43,6 +44,11 @@ def _path_from_env(name: str, default: Path) -> Path:
     return (APP_ROOT / path).resolve()
 
 
+def _stream_folder_from_env() -> str:
+    stream_folder = os.getenv("STREAM_FOLDER", DEFAULT_STREAM_FOLDER).strip().strip("\\/")
+    return stream_folder or DEFAULT_STREAM_FOLDER
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     media_root: Path
@@ -52,6 +58,7 @@ class Settings:
     server_port: int
     public_base_url: str
     player: str
+    stream_folder: str
 
 
 def get_settings() -> Settings:
@@ -70,4 +77,5 @@ def get_settings() -> Settings:
         server_port=server_port,
         public_base_url=public_base_url,
         player=player,
+        stream_folder=_stream_folder_from_env(),
     )

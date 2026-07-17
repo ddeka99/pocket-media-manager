@@ -41,6 +41,7 @@ PUBLIC_BASE_URL=http://192.168.1.50:8787
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8787
 PLAYER=infuse
+STREAM_FOLDER=_stream
 SUPPORTED_EXTENSIONS=.mp4,.mkv,.mov,.avi,.webm
 ```
 
@@ -51,6 +52,11 @@ needs to reach the PC.
 `infuse` and `vlc`. Infuse is the default because it has already worked cleanly
 in this setup. Set `PLAYER=vlc` to try VLC with the same recommendation and
 feedback flow.
+
+`STREAM_FOLDER` names a direct-play folder inside `MEDIA_ROOT`. With the
+default value, the folder is `MEDIA_ROOT\_stream`. Files in this folder are for
+Stream mode only: they are playable from the `Stream` button but are excluded
+from recommendations, Explore, Scoreboard, and `_mpv_prefs.json` updates.
 
 The helper stores recommendation preferences in `MEDIA_ROOT\_mpv_prefs.json`.
 If that file does not exist, it is created the first time preferences are saved.
@@ -156,6 +162,14 @@ http://<PC_LAN_IP>:8787/
 Tap `Recommend`. The helper selects a video, records the play, opens Infuse or
 VLC depending on `PLAYER`, and leaves the browser on a feedback page.
 
+Tap `Stream` when you want to browse `MEDIA_ROOT\STREAM_FOLDER` directly
+without entering the recommendation and feedback cycle. Stream looks like
+Explore, with sticky `Back` and `Home` controls, but tapping a media file only
+opens the configured player. The browser stays on the Stream listing, so you
+can return from Infuse or VLC and continue with the next episode. Stream plays
+supported media files only and does not update `_mpv_prefs.json`, play count,
+last played time, likes, dislikes, pending, or Something Else feedback.
+
 Tap `Explore` when you want to browse `MEDIA_ROOT` manually. Explore shows
 folders that contain supported media somewhere below them and shows only files
 with extensions from `SUPPORTED_EXTENSIONS`. Choosing a file records play
@@ -163,7 +177,8 @@ metadata, opens the configured player, and then uses the same feedback flow as
 recommendations. The top of Explore shows the full `MEDIA_ROOT` path at the
 root and relative folder names inside subfolders. Use the sticky `Home` button
 to leave Explore; subfolders also show a sticky `Back` button. Files with
-unresolved Something Else feedback are hidden from Explore.
+unresolved Something Else feedback are hidden from Explore, and the configured
+Stream folder is hidden because it has its own direct-play workflow.
 
 Tap `Scoreboard` to see a read-only ranking of recommend-able media files by
 their current numerical recommendation score. It shows only the media filename
@@ -310,6 +325,14 @@ which item was last recommended.
 - `POST /explore/play`
   Plays a selected supported media file from Explore, records play metadata, and
   shows feedback buttons.
+- `GET /stream`
+  Shows the direct-play Stream browser rooted at `MEDIA_ROOT\STREAM_FOLDER`.
+- `GET /stream?path=...`
+  Shows a subfolder under the Stream folder.
+- `POST /stream/play`
+  Creates a temporary playback token for a selected Stream file and returns the
+  configured player URL without recording recommendation metadata or showing
+  feedback.
 - `GET /scoreboard`
   Shows recommend-able media files ranked by current numerical score.
 - `GET /cleanup`
@@ -386,6 +409,10 @@ file the next time preferences are saved. Preference updates are protected by a
 process-level lock and written through a temporary file that atomically replaces
 the old file, so a failed write should leave the previous complete JSON file in
 place.
+
+Files under `MEDIA_ROOT\STREAM_FOLDER` are intentionally outside the preference
+system. They are not scanned for recommendations, not shown in Explore or
+Scoreboard, and not added to `_mpv_prefs.json` when played from Stream.
 
 When media files are deleted or moved, their old preference records can remain
 in `_mpv_prefs.json`. `Clean Up` lists those orphan records and removes only

@@ -258,6 +258,9 @@ def _home_page(settings: Settings) -> HTMLResponse:
   <form method="get" action="/select">
     <button class="secondary" type="submit">Recommend with Selections</button>
   </form>
+  <form method="get" action="/stream">
+    <button class="secondary" type="submit">Stream</button>
+  </form>
   <form method="get" action="/explore">
     <button class="secondary" type="submit">Explore</button>
   </form>
@@ -559,9 +562,24 @@ def _selected_folder_paths(settings: Settings, folder_names: list[str]) -> list[
     return [eligible[name] for name in folder_names if name in eligible]
 
 
+def _stream_root(settings: Settings) -> Path:
+    return (settings.media_root / settings.stream_folder).resolve()
+
+
+def _is_stream_path(settings: Settings, path: Path) -> bool:
+    return _is_under(path, _stream_root(settings))
+
+
 def _relative_to_media_root(settings: Settings, path: Path) -> str:
     try:
         return str(path.relative_to(settings.media_root))
+    except ValueError:
+        return str(path)
+
+
+def _relative_to_stream_root(settings: Settings, path: Path) -> str:
+    try:
+        return str(path.relative_to(_stream_root(settings)))
     except ValueError:
         return str(path)
 
@@ -579,6 +597,8 @@ def _explore_target(settings: Settings, relative_path: str | None) -> Path:
     target = (settings.media_root / relative_path).resolve()
     if not _is_under(target, settings.media_root):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Explore path is not allowed")
+    if _is_stream_path(settings, target):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stream folder is not part of Explore")
     return target
 
 
@@ -654,11 +674,138 @@ def _select_explored_file(settings: Settings, relative_path: str) -> dict[str, s
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media file missing")
     if selected.suffix.lower() not in settings.supported_extensions:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unsupported media file")
+    if _is_stream_path(settings, selected):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stream media is not part of Explore")
     if _has_other_feedback_for_file(settings, selected):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media file has unresolved Something Else feedback")
 
     state.clear_selected_folder_names()
     return _select_from_files(settings, [selected])
+
+
+def _stream_browse_url(settings: Settings, folder_path: Path) -> str:
+    relative_path = _relative_to_stream_root(settings, folder_path)
+    if relative_path == ".":
+        return "/stream"
+    return f"/stream?{urlencode({'path': relative_path})}"
+
+
+def _stream_browse_target(settings: Settings, relative_path: str | None) -> Path:
+    stream_root = _stream_root(settings)
+    if not relative_path:
+        return stream_root
+    target = (stream_root / relative_path).resolve()
+    if not _is_under(target, stream_root):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stream path is not allowed")
+    return target
+
+
+def _stream_folder_has_supported_media(settings: Settings, folder_path: Path) -> bool:
+    return bool(recommender.find_media_files(folder_path, settings.supported_extensions))
+
+
+def _stream_page(settings: Settings, relative_path: str | None = None) -> HTMLResponse:
+    feedback_page = _current_feedback_page()
+    if feedback_page is not None:
+        return feedback_page
+
+    current = _stream_browse_target(settings, relative_path)
+    stream_root = _stream_root(settings)
+    if not current.exists() or not current.is_dir():
+        return _page(
+            "Stream",
+            f"""<h1>Stream</h1>
+<p>The stream folder was not found. Create <em>{escape(str(stream_root))}</em> and put stream-only media there.</p>
+<a class="button secondary" href="/">Home</a>""",
+        )
+
+    folders = []
+    files = []
+    for child in sorted(current.iterdir(), key=lambda item: item.name.lower()):
+        if child.is_dir():
+            if _stream_folder_has_supported_media(settings, child):
+                folders.append(child)
+        elif child.is_file() and child.suffix.lower() in settings.supported_extensions:
+            files.append(child)
+
+    folder_links = "\n".join(
+        f'<a class="button secondary" href="{escape(_stream_browse_url(settings, folder), quote=True)}">{escape(folder.name)}</a>'
+        for folder in folders
+    )
+    file_controls = "\n".join(
+        f"""<button class="secondary" type="button" data-stream-path="{escape(_relative_to_stream_root(settings, file_path), quote=True)}">{escape(file_path.name)}</button>"""
+        for file_path in files
+    )
+    parent_link = ""
+    if current.resolve() != stream_root.resolve():
+        parent_link = f'<a class="button secondary" href="{escape(_stream_browse_url(settings, current.parent), quote=True)}">Back</a>'
+    toolbar_class = "toolbar" if parent_link else "toolbar single"
+    toolbar = f"""<div class="{toolbar_class}">
+  {parent_link}
+  <a class="button secondary" href="/">Home</a>
+</div>"""
+
+    current_label = str(stream_root) if current.resolve() == stream_root.resolve() else _relative_to_stream_root(settings, current)
+    empty_message = "<p>No supported stream media files found here.</p>" if not folders and not files else ""
+    return _page(
+        "Stream",
+        f"""<h1>Stream</h1>
+{toolbar}
+<p>Browsing <em>{escape(current_label)}</em></p>
+<p id="stream-status" aria-live="polite"></p>
+<div class="stack">
+  {folder_links}
+  {file_controls}
+  {empty_message}
+</div>
+<script>
+  document.querySelectorAll("[data-stream-path]").forEach(function (button) {{
+    button.addEventListener("click", function () {{
+      var status = document.getElementById("stream-status");
+      status.textContent = "Opening player...";
+      var body = new URLSearchParams();
+      body.set("path", button.dataset.streamPath);
+      fetch("/stream/play", {{
+        method: "POST",
+        headers: {{"Content-Type": "application/x-www-form-urlencoded"}},
+        body: body.toString()
+      }})
+        .then(function (response) {{
+          if (!response.ok) {{
+            throw new Error("Unable to open stream media.");
+          }}
+          return response.json();
+        }})
+        .then(function (payload) {{
+          window.location.href = payload.player_url;
+          status.textContent = "";
+        }})
+        .catch(function () {{
+          status.textContent = "Could not open this file.";
+        }});
+    }});
+  }});
+</script>""",
+    )
+
+
+def _stream_play_payload(settings: Settings, relative_path: str) -> dict[str, str]:
+    selected = _stream_browse_target(settings, relative_path)
+    if not selected.exists() or not selected.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stream media file missing")
+    if selected.suffix.lower() not in settings.supported_extensions:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unsupported stream media file")
+
+    token = state.create_stream_token(selected)
+    stream_url = _stream_url(settings, token)
+    return {
+        "file_name": selected.name,
+        "path": str(selected),
+        "stream_url": stream_url,
+        "infuse_url": build_infuse_url(stream_url, selected.name),
+        "player": settings.player,
+        "player_url": build_player_url(settings, stream_url, selected.name),
+    }
 
 
 def _return_path_after_feedback() -> str:
@@ -729,7 +876,11 @@ def _has_other_feedback_for_file(settings: Settings, file_path: Path) -> bool:
 def _find_recommendable_media_files(settings: Settings, media_root: Path) -> list[Path]:
     blocked_paths = _blocked_other_feedback_paths(settings)
     files = recommender.find_media_files(media_root, settings.supported_extensions)
-    return [file_path for file_path in files if str(file_path) not in blocked_paths]
+    return [
+        file_path
+        for file_path in files
+        if str(file_path) not in blocked_paths and not _is_stream_path(settings, file_path)
+    ]
 
 
 def _list_recommendable_top_level_media_folders(settings: Settings) -> list[Path]:
@@ -739,7 +890,9 @@ def _list_recommendable_top_level_media_folders(settings: Settings) -> list[Path
     folders = [
         folder
         for folder in settings.media_root.iterdir()
-        if folder.is_dir() and _find_recommendable_media_files(settings, folder)
+        if folder.is_dir()
+        and not _is_stream_path(settings, folder)
+        and _find_recommendable_media_files(settings, folder)
     ]
     folders.sort(key=lambda item: item.name.lower())
     return folders
@@ -869,6 +1022,16 @@ def scoreboard() -> HTMLResponse:
     return _scoreboard_page(_settings())
 
 
+@app.get("/stream", response_class=HTMLResponse)
+def stream_browse(path: str | None = None) -> HTMLResponse:
+    return _stream_page(_settings(), path)
+
+
+@app.post("/stream/play")
+def play_stream_file(path: str = Form(...)) -> dict[str, str]:
+    return _stream_play_payload(_settings(), path)
+
+
 @app.get("/feedback/addressed", response_class=HTMLResponse)
 def feedback_addressed() -> HTMLResponse:
     feedback_page = _current_feedback_page()
@@ -957,7 +1120,7 @@ def recommend_from_selected_folders(folders: list[str] = Form(default=[])) -> HT
             selected_folders,
             settings.supported_extensions,
         )
-        if str(file_path) not in blocked_paths
+        if str(file_path) not in blocked_paths and not _is_stream_path(settings, file_path)
     ]
     if not files:
         return _selection_page(
