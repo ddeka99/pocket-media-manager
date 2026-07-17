@@ -17,9 +17,6 @@ Something Else blocks.
 - `pc-helper/`
   FastAPI helper that scans a Windows media folder, picks a recommendation,
   streams the selected file, and records like/dislike/pending feedback.
-- `import random.py`
-  The original local PC script used as the source reference for the v1
-  recommendation rules. It is not imported directly by the helper.
 
 ## Quick Start
 
@@ -87,6 +84,10 @@ Test from your phone on the same Wi-Fi:
 ```text
 http://<PC_LAN_IP>:8787/
 ```
+
+For this personal app, validation is intentionally ad-hoc: run the helper and
+try the workflow from your phone instead of maintaining an automated test
+suite.
 
 Tap `Recommend` to open the configured player. Use `Recommend with Selections`
 when you want to choose one or more top-level folders under the configured media

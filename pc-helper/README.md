@@ -413,13 +413,11 @@ Playback tokens are temporary and in-memory. Only the latest 30 generated links
 are kept, which prevents quick recommendation cycling from leaving an unlimited
 pile of old stream URLs active.
 
-## Testing
+## Validation
 
-Run:
-
-```bash
-./scripts/test.sh
-```
-
-The tests use temporary media folders and preference files, so they do not
-modify your real media library or your real `_mpv_prefs.json`.
+This personal helper no longer carries an automated test suite. For changes,
+run the development server and try the affected workflow from your phone or
+from the local browser. The key manual checks are that the home page opens,
+recommendations launch the configured player, feedback returns to the expected
+page, and maintenance screens such as Scoreboard, Address Other Feedback, and
+Clean Up show the expected data.
