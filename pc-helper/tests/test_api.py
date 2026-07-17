@@ -96,8 +96,106 @@ def test_home_shows_recommend_and_reset(monkeypatch, tmp_path):
     assert "Explore" in response.text
     assert "Scoreboard" in response.text
     assert "Address Other Feedback" in response.text
+    assert "Clean Up" in response.text
     assert "Reset Preferences" in response.text
     assert "Excluded folders" not in response.text
+
+
+def test_cleanup_lists_orphan_preference_records(monkeypatch, tmp_path):
+    media_root, prefs_file = configure_env(monkeypatch, tmp_path)
+    existing_file = media_root / "Anime" / "existing.mp4"
+    missing_file = media_root / "Anime" / "missing.mp4"
+    existing_file.parent.mkdir()
+    existing_file.write_bytes(b"fake media")
+    prefs_file.write_text(
+        json.dumps(
+            {
+                "files": {
+                    str(existing_file): {
+                        "likes": 1,
+                        "dislikes": 0,
+                        "pending": 0,
+                        "play_count": 1,
+                        "last_played": "2026-01-01T00:00:00",
+                        "last_feedback": "y",
+                    },
+                    str(missing_file): {
+                        "likes": 0,
+                        "dislikes": 1,
+                        "pending": 0,
+                        "play_count": 2,
+                        "last_played": "2025-01-01T00:00:00",
+                        "last_feedback": "n",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    client = TestClient(app)
+
+    response = client.get("/cleanup")
+
+    assert response.status_code == 200
+    assert '<button type="submit" form="cleanup-form">Clean</button>' in response.text
+    assert '<a class="button secondary" href="/">Cancel</a>' in response.text
+    assert 'data-select-cleanup="all">Select All</button>' in response.text
+    assert f"Orphan records in <em>{media_root}</em>:" in response.text
+    assert '<span class="tag">Anime</span>' in response.text
+    assert "missing.mp4" in response.text
+    assert "existing.mp4" not in response.text
+
+
+def test_cleanup_removes_selected_orphans_only(monkeypatch, tmp_path):
+    media_root, prefs_file = configure_env(monkeypatch, tmp_path)
+    existing_file = media_root / "Anime" / "existing.mp4"
+    selected_missing_file = media_root / "Anime" / "selected-missing.mp4"
+    unselected_missing_file = media_root / "Anime" / "unselected-missing.mp4"
+    existing_file.parent.mkdir()
+    existing_file.write_bytes(b"fake media")
+    prefs_file.write_text(
+        json.dumps(
+            {
+                "files": {
+                    str(existing_file): {
+                        "likes": 1,
+                        "dislikes": 0,
+                        "pending": 0,
+                        "play_count": 1,
+                        "last_played": "2026-01-01T00:00:00",
+                        "last_feedback": "y",
+                    },
+                    str(selected_missing_file): {
+                        "likes": 0,
+                        "dislikes": 1,
+                        "pending": 0,
+                        "play_count": 2,
+                        "last_played": "2025-01-01T00:00:00",
+                        "last_feedback": "n",
+                    },
+                    str(unselected_missing_file): {
+                        "likes": 0,
+                        "dislikes": 0,
+                        "pending": 1,
+                        "play_count": 3,
+                        "last_played": "2024-01-01T00:00:00",
+                        "last_feedback": "p",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    client = TestClient(app, follow_redirects=False)
+
+    response = client.post("/cleanup", data={"paths": str(selected_missing_file)})
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+    prefs = json.loads(prefs_file.read_text(encoding="utf-8"))
+    assert str(existing_file) in prefs["files"]
+    assert str(selected_missing_file) not in prefs["files"]
+    assert str(unselected_missing_file) in prefs["files"]
 
 
 def test_scoreboard_lists_recommendable_files_by_score(monkeypatch, tmp_path):

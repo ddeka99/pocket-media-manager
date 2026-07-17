@@ -267,6 +267,9 @@ def _home_page(settings: Settings) -> HTMLResponse:
   <form method="get" action="/feedback/addressed">
     <button class="secondary" type="submit">Address Other Feedback</button>
   </form>
+  <form method="get" action="/cleanup">
+    <button class="secondary" type="submit">Clean Up</button>
+  </form>
   <form method="get" action="/reset">
     <button class="secondary" type="submit">Reset Preferences</button>
   </form>
@@ -304,6 +307,84 @@ def _scoreboard_page(settings: Settings) -> HTMLResponse:
   <a class="button secondary" href="/">Back</a>
 </div>
 {rows}""",
+    )
+
+
+def _is_orphan_preference_path(settings: Settings, file_path: str) -> bool:
+    path = Path(file_path)
+    return not _is_under(path, settings.media_root) or not path.is_file()
+
+
+def _orphan_preference_paths(settings: Settings, prefs: dict[str, Any]) -> list[str]:
+    files = prefs.get("files", {})
+    if not isinstance(files, dict):
+        return []
+
+    orphan_paths = [
+        file_path
+        for file_path in files
+        if isinstance(file_path, str) and _is_orphan_preference_path(settings, file_path)
+    ]
+    orphan_paths.sort(
+        key=lambda file_path: (
+            _feedback_display_parts(settings, file_path)[0].lower(),
+            _feedback_display_parts(settings, file_path)[1].lower(),
+            file_path.lower(),
+        )
+    )
+    return orphan_paths
+
+
+def _cleanup_page(settings: Settings) -> HTMLResponse:
+    feedback_page = _current_feedback_page()
+    if feedback_page is not None:
+        return feedback_page
+
+    with PREFS_LOCK:
+        prefs = _load_current_prefs(settings)
+        orphan_paths = _orphan_preference_paths(settings, prefs)
+
+    media_root_label = escape(str(settings.media_root))
+    if not orphan_paths:
+        return _page(
+            "Clean Up",
+            f"""<h1>Clean Up</h1>
+<p>No orphan recommendation records found in <em>{media_root_label}</em>.</p>
+<a class="button secondary" href="/">Cancel</a>""",
+        )
+
+    orphan_controls = "\n".join(
+        f"""<label class="check">
+  <input type="checkbox" name="paths" value="{escape(file_path, quote=True)}">
+  <span><span class="tag">{escape(_feedback_display_parts(settings, file_path)[0])}</span> <span class="file-name">{escape(_feedback_display_parts(settings, file_path)[1])}</span></span>
+</label>"""
+        for file_path in orphan_paths
+    )
+    return _page(
+        "Clean Up",
+        f"""<h1>Clean Up</h1>
+<div class="toolbar">
+  <button type="submit" form="cleanup-form">Clean</button>
+  <a class="button secondary" href="/">Cancel</a>
+  <button class="secondary" type="button" data-select-cleanup="all">Select All</button>
+  <button class="secondary" type="button" data-select-cleanup="none">Deselect All</button>
+</div>
+<form id="cleanup-form" method="post" action="/cleanup" class="stack">
+  <p>Orphan records in <em>{media_root_label}</em>:</p>
+  <div class="stack">
+    {orphan_controls}
+  </div>
+</form>
+<script>
+  document.querySelectorAll("[data-select-cleanup]").forEach(function (button) {{
+    button.addEventListener("click", function () {{
+      var checked = button.dataset.selectCleanup === "all";
+      document.querySelectorAll('input[name="paths"]').forEach(function (checkbox) {{
+        checkbox.checked = checked;
+      }});
+    }});
+  }});
+</script>""",
     )
 
 
@@ -794,6 +875,28 @@ def feedback_addressed() -> HTMLResponse:
     if feedback_page is not None:
         return feedback_page
     return _feedback_addressed_page(_settings())
+
+
+@app.get("/cleanup", response_class=HTMLResponse)
+def cleanup() -> HTMLResponse:
+    return _cleanup_page(_settings())
+
+
+@app.post("/cleanup", response_model=None)
+def save_cleanup(paths: list[str] = Form(default=[])) -> RedirectResponse:
+    if state.is_awaiting_feedback():
+        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
+    settings = _settings()
+    with PREFS_LOCK:
+        prefs = _load_current_prefs(settings)
+        files = prefs.setdefault("files", {})
+        if isinstance(files, dict):
+            for file_path in paths:
+                if isinstance(file_path, str) and _is_orphan_preference_path(settings, file_path):
+                    files.pop(file_path, None)
+            recommender.save_prefs(prefs, settings.prefs_file)
+    return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/feedback/addressed", response_model=None)

@@ -170,6 +170,13 @@ their current numerical recommendation score. It shows only the media filename
 and score, excludes files with unresolved Something Else feedback, and keeps a
 sticky `Back` button at the top while you scroll.
 
+Tap `Clean Up` when you want to remove orphan records from
+`MEDIA_ROOT\_mpv_prefs.json`. The page lists preference records whose saved
+file path is no longer present under `MEDIA_ROOT`, such as an older lower
+quality copy you deleted after replacing it. Each row shows the top-level
+folder as a tag and the media filename. Select the orphan rows you want removed
+and tap `Clean`; `Cancel` returns home without changing the preference file.
+
 Tap `Recommend with Selections` when you want to limit one recommendation to
 specific top-level folders under `MEDIA_ROOT`. The selection page shows the
 configured media root at the top, then only shows top-level folders that contain
@@ -248,6 +255,8 @@ date-added.
 
 The home page also has `Reset Preferences`. It opens a confirmation page before
 clearing `MEDIA_ROOT\_mpv_prefs.json` back to an empty preference database.
+Use `Clean Up` when you only want to remove selected orphan records while
+keeping the rest of your recommendation history.
 
 ## Optional Phone Shortcuts
 
@@ -301,6 +310,14 @@ which item was last recommended.
 - `POST /explore/play`
   Plays a selected supported media file from Explore, records play metadata, and
   shows feedback buttons.
+- `GET /scoreboard`
+  Shows recommend-able media files ranked by current numerical score.
+- `GET /cleanup`
+  Shows orphan records from `_mpv_prefs.json` whose paths are no longer present
+  under `MEDIA_ROOT`.
+- `POST /cleanup`
+  Removes selected orphan records from `_mpv_prefs.json` and returns to the
+  home page. Existing media records are kept.
 - `GET /next`
   Picks and records a recommendation, then returns `stream_url`, `infuse_url`,
   configured `player`, `player_url`, and feedback URLs.
@@ -369,6 +386,11 @@ file the next time preferences are saved. Preference updates are protected by a
 process-level lock and written through a temporary file that atomically replaces
 the old file, so a failed write should leave the previous complete JSON file in
 place.
+
+When media files are deleted or moved, their old preference records can remain
+in `_mpv_prefs.json`. `Clean Up` lists those orphan records and removes only
+the checked entries. It does not delete media files and it does not reset
+preference records for files that still exist.
 
 Something Else feedback is stored separately in `other_feedback.jsonl` under
 `MEDIA_ROOT`. Each line has `path`, `type`, and `created_at`. It does not affect
