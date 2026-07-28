@@ -512,7 +512,11 @@ def _other_feedback_page(file_name: str) -> HTMLResponse:
     )
 
 
-def _select_from_files(settings: Settings, files: list[Path]) -> dict[str, str]:
+def _select_from_files(
+    settings: Settings,
+    files: list[Path],
+    feedback_return_path: str = "/",
+) -> dict[str, str]:
     if not files:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -529,6 +533,7 @@ def _select_from_files(settings: Settings, files: list[Path]) -> dict[str, str]:
     state.set_last_recommended(selected)
     state.set_awaiting_feedback(True)
     state.set_awaiting_other_feedback(False)
+    state.set_feedback_return_path(feedback_return_path)
     token = state.create_stream_token(selected)
     stream_url = _stream_url(settings, token)
     infuse_url = build_infuse_url(stream_url, selected.name)
@@ -680,7 +685,11 @@ def _select_explored_file(settings: Settings, relative_path: str) -> dict[str, s
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media file has unresolved Something Else feedback")
 
     state.clear_selected_folder_names()
-    return _select_from_files(settings, [selected])
+    return _select_from_files(
+        settings,
+        [selected],
+        feedback_return_path=_explore_url(settings, selected.parent),
+    )
 
 
 def _stream_browse_url(settings: Settings, folder_path: Path) -> str:
@@ -809,7 +818,7 @@ def _stream_play_payload(settings: Settings, relative_path: str) -> dict[str, st
 
 
 def _return_path_after_feedback() -> str:
-    return "/select" if state.get_selected_folder_names() else "/"
+    return state.consume_feedback_return_path()
 
 
 def _normalize_other_feedback_type(raw_value: Any) -> str:
@@ -1130,7 +1139,7 @@ def recommend_from_selected_folders(folders: list[str] = Form(default=[])) -> HT
         )
 
     state.set_selected_folder_names([folder.name for folder in selected_folders])
-    selected = _select_from_files(settings, files)
+    selected = _select_from_files(settings, files, feedback_return_path="/select")
     return _feedback_page_for_selection(settings, selected)
 
 
@@ -1185,9 +1194,10 @@ def _feedback_response(feedback: str, request: Request) -> dict[str, Any] | Redi
             recommender.save_prefs(prefs, settings.prefs_file)
     state.set_awaiting_other_feedback(False)
     state.set_awaiting_feedback(False)
+    return_path = _return_path_after_feedback()
 
     if _wants_html(request):
-        return RedirectResponse(_return_path_after_feedback(), status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(return_path, status_code=status.HTTP_303_SEE_OTHER)
     return {"ok": True, "feedback": feedback, "file_name": last_recommended.name}
 
 
@@ -1283,9 +1293,10 @@ def save_other_feedback(
         _append_other_feedback(settings, last_recommended, normalized_feedback_type)
     state.set_awaiting_other_feedback(False)
     state.set_awaiting_feedback(False)
+    return_path = _return_path_after_feedback()
 
     if _wants_html(request):
-        return RedirectResponse(_return_path_after_feedback(), status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(return_path, status_code=status.HTTP_303_SEE_OTHER)
     return {
         "ok": True,
         "feedback": "other",

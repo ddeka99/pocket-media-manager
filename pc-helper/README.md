@@ -178,7 +178,9 @@ recommendations. The top of Explore shows the full `MEDIA_ROOT` path at the
 root and relative folder names inside subfolders. Use the sticky `Home` button
 to leave Explore; subfolders also show a sticky `Back` button. Files with
 unresolved Something Else feedback are hidden from Explore, and the configured
-Stream folder is hidden because it has its own direct-play workflow.
+Stream folder is hidden because it has its own direct-play workflow. After you
+submit feedback for an explored file, the browser returns to the same Explore
+folder that contained that file so you can continue browsing from there.
 
 Tap `Scoreboard` to see a read-only ranking of recommend-able media files by
 their current numerical recommendation score. It shows only the media filename
@@ -231,7 +233,8 @@ When you switch back to the browser, choose:
 
 After feedback is completed, the browser returns to the home page and
 `Recommend` is available again. If the recommendation came from selected
-folders, it returns to the selection page with those folders still checked.
+folders, it returns to the selection page with those folders still checked. If
+the file was opened through Explore, it returns to that file's Explore folder.
 
 Something Else entries are appended to:
 

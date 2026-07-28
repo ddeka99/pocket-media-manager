@@ -12,6 +12,7 @@ STREAM_TOKENS_LOCK = RLock()
 AWAITING_FEEDBACK = False
 AWAITING_OTHER_FEEDBACK = False
 SELECTED_FOLDER_NAMES: list[str] = []
+FEEDBACK_RETURN_PATH = "/"
 
 
 def set_last_recommended(file_path: Path) -> None:
@@ -54,6 +55,18 @@ def clear_selected_folder_names() -> None:
     SELECTED_FOLDER_NAMES.clear()
 
 
+def set_feedback_return_path(path: str) -> None:
+    global FEEDBACK_RETURN_PATH
+    FEEDBACK_RETURN_PATH = path
+
+
+def consume_feedback_return_path() -> str:
+    global FEEDBACK_RETURN_PATH
+    path = FEEDBACK_RETURN_PATH
+    FEEDBACK_RETURN_PATH = "/"
+    return path
+
+
 def create_stream_token(file_path: Path) -> str:
     token = secrets.token_urlsafe(16)
     with STREAM_TOKENS_LOCK:
@@ -70,10 +83,11 @@ def get_stream_path(token: str) -> Path | None:
 
 
 def clear_state() -> None:
-    global LAST_RECOMMENDED_PATH, AWAITING_FEEDBACK, AWAITING_OTHER_FEEDBACK
+    global LAST_RECOMMENDED_PATH, AWAITING_FEEDBACK, AWAITING_OTHER_FEEDBACK, FEEDBACK_RETURN_PATH
     LAST_RECOMMENDED_PATH = None
     AWAITING_FEEDBACK = False
     AWAITING_OTHER_FEEDBACK = False
+    FEEDBACK_RETURN_PATH = "/"
     clear_selected_folder_names()
     with STREAM_TOKENS_LOCK:
         STREAM_TOKENS.clear()
